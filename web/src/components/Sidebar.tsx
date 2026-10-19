@@ -121,13 +121,17 @@ function Players({ match, onPick }: Props & { onPick: (p: number) => void }) {
       </div>
       {ts && (
         <div className="stat-strip">
-          <Stat label="Smart picks" value={`${Math.round(ts.decision_score)}%`} hint="Decisions rated best or good" />
+          <Stat label="Good decisions" value={`${Math.round(ts.decision_score)}%`} hint="Passes & shots close to the best option" />
           <Stat label="Pass accuracy" value={`${Math.round(ts.pass_completion ?? 0)}%`} hint="Passes completed" />
           <Stat label="xG" value={(ts.xg ?? 0).toFixed(2)} hint="Expected goals from shots" />
         </div>
       )}
       <div className="list">
-        <div className="list-head muted small"><span>Player</span><span>Smart picks</span></div>
+        <p className="explain muted small">
+          <b>Good decisions</b> = share of passes and shots rated <span className="verdict sm good">Best</span> or{" "}
+          <span className="verdict sm good">Good</span> choice.
+        </p>
+        <div className="list-head muted small"><span>Player</span><span>Good decisions</span></div>
         {rows.map(({ p, s }) => (
           <button key={p.idx} className="player-row" onClick={() => onPick(p.idx)} title="See this player's key moments">
             <span className="num" style={{ background: match.teams[p.team].color }}>{p.number}</span>

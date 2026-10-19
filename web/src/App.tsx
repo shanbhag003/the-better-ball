@@ -1,5 +1,6 @@
-import { CircleHelp, Play } from "lucide-react";
+import { CircleHelp, Play, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Coach } from "./components/Coach";
 import { Controls } from "./components/Controls";
 import { DecisionCard } from "./components/DecisionCard";
 import { Onboarding } from "./components/Onboarding";
@@ -58,6 +59,9 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
   const [playerFilter, setPlayerFilter] = useState<number | null>(null);
   const [onboarding, setOnboarding] = useState(() => !readFlag(ONBOARD_KEY));
   const [started, setStarted] = useState(false);
+  const [coach, setCoach] = useState(false); // spotlight walkthrough
+  const [tourOn, setTourOn] = useState(false); // stepping through moments
+  const [tourIdx, setTourIdx] = useState(0);
   const pending = useRef<Decision | null>(null);
 
   const moments = useMemo(() => {
@@ -76,14 +80,21 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
     (d: Decision) => {
       setStarted(true);
       setSelected(null);
+      setTourIdx(Math.max(0, moments.indexOf(d)));
       pending.current = d;
       pb.pause();
       pb.setSpeed(1);
       pb.seek(d.t - LEAD_IN);
       pb.play();
     },
-    [pb],
+    [pb, moments],
   );
+
+  const startTour = useCallback(() => {
+    pb.pause();
+    setSelected(null);
+    setCoach(true);
+  }, [pb]);
 
   // Auto-stop at the requested moment, and (optionally) at every key moment.
   useEffect(() => {
@@ -141,6 +152,9 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
             <div className="pitch-legend">
               <span><i className="line played" /> Played</span>
               <span><i className="line better" /> Better option</span>
+              {showCard && (selected!.chosen.beaten?.length || selected!.best.beaten?.length) ? (
+                <span><i className="ring" /> Defender beaten</span>
+              ) : null}
               <span className="muted">Hover a player for details</span>
             </div>
             <Pitch match={match} pb={pb} selected={selected} showBetter={showBetter} />
@@ -158,8 +172,19 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
                 d={selected!}
                 onReplay={() => goTo(selected!)}
                 onNext={nextMoment ? () => goTo(nextMoment) : null}
+                nextLabel={tourOn ? `Next · ${tourIdx + 2}/${moments.length}` : "Next moment"}
+                onFinish={tourOn ? () => { setTourOn(false); setSelected(null); } : null}
                 onClose={() => setSelected(null)}
               />
+            )}
+
+            {tourOn && (
+              <div className="tour-banner pop">
+                <span className="tb-label">Guided tour</span>
+                <span className="tb-count"><b>{tourIdx + 1}</b> / {moments.length}</span>
+                <span className="tb-bar"><span style={{ width: `${((tourIdx + 1) / Math.max(1, moments.length)) * 100}%` }} /></span>
+                <button className="icon-btn sm" onClick={() => setTourOn(false)} aria-label="Exit tour"><X size={15} /></button>
+              </div>
             )}
           </div>
           <Controls
@@ -179,7 +204,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
           moments={moments}
           activeId={selected?.id ?? null}
           onMoment={goTo}
-          onTour={() => moments[0] && goTo(moments[0])}
+          onTour={startTour}
           playerFilter={playerFilter}
           setPlayerFilter={setPlayerFilter}
           teamFilter={teamFilter}
@@ -192,7 +217,18 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
           onDone={(tour) => {
             writeFlag(ONBOARD_KEY);
             setOnboarding(false);
-            if (tour && moments[0]) goTo(moments[0]);
+            if (tour) startTour();
+          }}
+        />
+      )}
+
+      {coach && (
+        <Coach
+          onExit={() => setCoach(false)}
+          onFinish={() => {
+            setCoach(false);
+            setTourOn(true);
+            if (moments[0]) goTo(moments[0]);
           }}
         />
       )}

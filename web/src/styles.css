@@ -185,6 +185,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 .metric .val { font-weight: 700; }
 .metric .val.strong { font-size: 16px; }
 .opt.better .val.strong { color: var(--better); }
+.ring { display: inline-block; width: 13px; height: 13px; border-radius: 50%; border: 2px dashed #fff; }
+.tag.beat { display: inline-flex; align-items: center; gap: 6px; }
+.tag.beat.better { color: var(--better); background: rgba(0,255,133,0.1); }
+.tag.beat.better .ring { border-color: var(--better); }
 .tag { justify-self: start; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--surface-2); }
 .dc-cost { display: flex; align-items: baseline; gap: 8px; margin: 10px 2px 2px; }
 .dc-cost .big { font-size: 24px; font-weight: 800; color: var(--warn); letter-spacing: -0.02em; }
@@ -292,6 +296,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .mc-body .who { display: flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gain { margin-left: auto; font-weight: 800; color: var(--warn); font-size: 14px; }
 
+.explain { margin: 0; line-height: 1.7; flex: none; }
+.explain .verdict { padding: 1px 7px; font-size: 11px; }
 .stat-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: none; }
 .stat { flex-direction: column; align-items: flex-start; padding: 10px; border-radius: 12px; background: var(--surface); }
 .stat .val { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
@@ -320,6 +326,40 @@ button:disabled { opacity: 0.5; cursor: default; }
 .ob-visual.legend div { display: flex; align-items: center; gap: 12px; }
 .ob-visual.legend .line { width: 46px; }
 .ob-visual.chips { gap: 10px; }
+.ob-moment {
+  display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 12px;
+  background: rgba(26, 0, 32, 0.88); border: 1px solid var(--border);
+}
+.ob-moment .min { font-weight: 800; font-size: 15px; }
+.ob-moment .gain { margin-left: 6px; }
+
+/* ---------- guided tour ---------- */
+.coach { position: fixed; inset: 0; z-index: 60; }
+.spot {
+  position: fixed; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(10, 0, 14, 0.74), 0 0 0 2px var(--better), 0 0 30px rgba(0,255,133,0.45);
+  transition: all 0.3s cubic-bezier(.2,.8,.2,1);
+}
+.coach-tip { position: fixed; padding: 16px; background: rgba(42, 0, 48, 0.97); }
+.coach-tip h3 { margin: 8px 0 4px; font-size: 18px; letter-spacing: -0.01em; }
+.coach-tip p { margin: 0 0 14px; font-size: 13.5px; line-height: 1.4; }
+.coach-top { display: flex; justify-content: space-between; align-items: center; }
+.coach-actions { display: flex; align-items: center; gap: 8px; }
+.coach-actions .btn { margin-left: auto; }
+.link { color: var(--muted); font-size: 12px; font-weight: 600; }
+.link:hover { color: var(--text); }
+.ob-dots.inline { margin: 0; }
+.ob-dots.inline span { width: 7px; height: 7px; border-radius: 4px; background: var(--surface-2); transition: width 0.2s; }
+.ob-dots.inline span.on { width: 18px; background: var(--better); }
+.tour-banner {
+  position: absolute; top: 46px; left: 50%; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px; border-radius: 999px;
+  background: rgba(55, 0, 60, 0.92); border: 1px solid rgba(0,255,133,0.4); box-shadow: var(--shadow);
+  font-size: 12.5px; white-space: nowrap;
+}
+.tb-label { font-weight: 700; color: var(--better); }
+.tb-bar { width: 90px; height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.tb-bar span { display: block; height: 100%; background: var(--better); transition: width 0.3s; }
 .ob-dots { display: flex; justify-content: center; gap: 6px; margin: 18px 0; }
 .ob-dots button { width: 8px; height: 8px; border-radius: 4px; background: var(--surface-2); transition: width 0.2s; }
 .ob-dots button.on { width: 22px; background: var(--better); }

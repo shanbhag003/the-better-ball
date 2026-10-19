@@ -118,11 +118,33 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
       // Players. When a moment is open, fade everyone not involved.
       const r = Math.max(9, 1.05 * s);
       const focus = showSel ? new Set([selected!.player, selected!.chosen.receiver, selected!.best.receiver]) : null;
+      // Defenders each option takes out of the game: white = played, green = better.
+      const beaten = new Map<number, string>();
+      if (showSel) {
+        for (const i of selected!.chosen.beaten ?? []) beaten.set(i, PLAYED);
+        if (showBetter && selected!.cost >= match.meta.good_threshold)
+          for (const i of selected!.best.beaten ?? []) beaten.set(i, BETTER);
+        beaten.forEach((_, i) => focus!.add(i));
+      }
       match.players.forEach((p, i) => {
         const [x, y] = snap.pos[i];
         const cx = X(x);
         const cy = Y(y);
         ctx.globalAlpha = focus && !focus.has(i) ? 0.45 : 1;
+        const bc = beaten.get(i);
+        if (bc) {
+          ctx.save();
+          ctx.strokeStyle = bc;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.lineDashOffset = now / 60;
+          ctx.shadowColor = bc;
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
         const ring = rings.get(i);
         if (ring) {
           ctx.globalAlpha = ring.alpha;

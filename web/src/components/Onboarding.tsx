@@ -31,8 +31,11 @@ const STEPS: { icon: ReactNode; title: string; text: string; visual: ReactNode }
     text: "Biggest missed chances. One click away.",
     visual: (
       <div className="ob-visual chips">
-        <span className="verdict warn">Missed chance</span>
-        <span className="gain">+18%</span>
+        <div className="ob-moment">
+          <span className="min">4'</span>
+          <span className="verdict sm warn">Missed chance</span>
+          <span className="gain">+18%</span>
+        </div>
       </div>
     ),
   },

@@ -7,10 +7,12 @@ interface Props {
   d: Decision;
   onReplay: () => void;
   onNext: (() => void) | null;
+  nextLabel: string;
+  onFinish: (() => void) | null;
   onClose: () => void;
 }
 
-export function DecisionCard({ match, d, onReplay, onNext, onClose }: Props) {
+export function DecisionCard({ match, d, onReplay, onNext, nextLabel, onFinish, onClose }: Props) {
   const p = match.players[d.player];
   const v = VERDICT[d.verdict];
   const missed = d.cost >= match.meta.good_threshold;
@@ -44,7 +46,8 @@ export function DecisionCard({ match, d, onReplay, onNext, onClose }: Props) {
 
       <div className="dc-actions">
         <button className="btn ghost" onClick={onReplay}><RotateCcw size={15} /> Replay</button>
-        {onNext && <button className="btn primary" onClick={onNext}>Next moment <ChevronRight size={16} /></button>}
+        {onNext && <button className="btn primary" onClick={onNext}>{nextLabel} <ChevronRight size={16} /></button>}
+        {!onNext && onFinish && <button className="btn primary" onClick={onFinish}><Check size={16} /> Finish tour</button>}
       </div>
     </div>
   );
@@ -64,7 +67,11 @@ function OptionBox({ match, label, o, outcome, tone }: { match: Match; label: st
       </div>
       <Metric name="Arrives" hint={o.kind === "shot" ? "Chance the shot scores" : "Chance the pass reaches the receiver"} value={pct(o.p)} />
       <Metric name="Goal chance" hint="Chance this move ends in a goal" value={goalPct(o.ev)} strong />
-      {o.bypassed > 0 && <div className="tag">Beats {o.bypassed} defender{o.bypassed > 1 ? "s" : ""}</div>}
+      {o.bypassed > 0 && (
+        <div className={`tag beat ${tone}`} title="Ringed on the pitch">
+          <i className="ring" /> Beats {o.bypassed} defender{o.bypassed > 1 ? "s" : ""}
+        </div>
+      )}
     </div>
   );
 }

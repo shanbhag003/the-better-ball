@@ -34,6 +34,7 @@ export interface Option {
   xt: number;
   ev: number;
   bypassed: number;
+  beaten: number[]; // defenders this pass takes out of the game
   threat: number | null;
 }
 

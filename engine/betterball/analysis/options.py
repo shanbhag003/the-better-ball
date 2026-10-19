@@ -43,20 +43,27 @@ def _frame_arrays(event: dict, players: list[dict]):
     return pos, vel, team, is_gk
 
 
-def _bypassed(passer: np.ndarray, target: np.ndarray, outfield_opp: np.ndarray) -> int:
-    """Outfield defenders the pass takes out of the game.
+def _beaten_mask(passer: np.ndarray, target: np.ndarray, outfield_opp: np.ndarray) -> np.ndarray:
+    """Which outfield defenders the pass takes out of the game.
 
-    A defender counts when he was goal-side of the ball before the pass, is
-    behind the ball after it, and was close enough to the pass to matter
-    (within ``BYPASS_CORRIDOR`` metres of its line). Sideways or backward
-    passes beat nobody.
+    A defender counts when they were goal-side of the ball before the pass,
+    are behind the ball after it, and were close enough to the pass to matter
+    (within ``BYPASS_CORRIDOR`` metres of its line). Sideways, diagonal-back
+    and backward passes beat nobody.
     """
-    if target[0] - passer[0] < MIN_PROGRESS:
-        return 0
+    progress = target[0] - passer[0]
+    length = float(np.linalg.norm(target - passer))
+    # Only clearly forward passes (within ~60 degrees of goal direction) beat anyone.
+    if progress < MIN_PROGRESS or progress < 0.5 * length:
+        return np.zeros(len(outfield_opp), dtype=bool)
     x = outfield_opp[:, 0]
     between = (x > passer[0] + 0.5) & (x < target[0] - 1.0)
     near_line = pitch.point_segment_distance(outfield_opp, passer, target) <= BYPASS_CORRIDOR
-    return int(np.sum(between & near_line))
+    return between & near_line
+
+
+def _bypassed(passer: np.ndarray, target: np.ndarray, outfield_opp: np.ndarray) -> int:
+    return int(_beaten_mask(passer, target, outfield_opp).sum())
 
 
 def _score_pass(passer_xy, target, recv_idx, pos, vel, opp_idx, keeper, lofted=None):
@@ -79,7 +86,11 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
     opp_idx = np.where(team != my_team)[0]
     mates = [j for j in np.where(team == my_team)[0] if j != me]
     passer_xy = pos[me]
-    opp_outfield = pos[opp_idx[~is_gk[opp_idx]]]
+    opp_out_idx = opp_idx[~is_gk[opp_idx]]
+    opp_outfield = pos[opp_out_idx]
+
+    def beaten(target):
+        return [int(i) for i in opp_out_idx[_beaten_mask(passer_xy, target, opp_outfield)]]
     keeper = int(np.where(is_gk[opp_idx])[0][0]) if is_gk[opp_idx].any() else None
     xt_here = float(xt(passer_xy))
 
@@ -109,7 +120,8 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
                 "xt_target": round(gain, 4),
                 "xt_added": round(ev - xt_here, 4),
                 "ev": round(ev, 4),
-                "bypassed": _bypassed(passer_xy, target, opp_outfield),
+                "bypassed": len(beaten(target)),
+                "beaten": beaten(target),
                 "threat_defender": threat,
             })
 
@@ -125,6 +137,7 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
             "xt_added": round(shot_xg - xt_here, 4),
             "ev": round(shot_xg, 4),
             "bypassed": 0,
+            "beaten": [],
             "threat_defender": None,
         })
 
@@ -134,7 +147,7 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
         chosen = {
             "kind": "shot", "style": "header" if event.get("header") else "shot", "receiver": None,
             "target": event["target"], "p_success": shot_xg, "xt_target": shot_xg,
-            "xt_added": round(shot_xg - xt_here, 4), "ev": shot_xg, "bypassed": 0, "threat_defender": None,
+            "xt_added": round(shot_xg - xt_here, 4), "ev": shot_xg, "bypassed": 0, "beaten": [], "threat_defender": None,
         }
         # Re-heading/shooting is the same action — drop the duplicate footed-shot option.
         options = [o for o in options if o["kind"] != "shot"]
@@ -151,7 +164,8 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
             "xt_target": round(gain, 4),
             "xt_added": round(ev - xt_here, 4),
             "ev": round(ev, 4),
-            "bypassed": _bypassed(passer_xy, target, opp_outfield),
+            "bypassed": len(beaten(target)),
+                "beaten": beaten(target),
             "threat_defender": threat,
         }
 

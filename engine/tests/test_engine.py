@@ -91,3 +91,4 @@ def test_bypassed_counts_only_defenders_near_the_pass():
     ])
     assert _bypassed(passer, target, defenders) == 2
     assert _bypassed(passer, np.array([42.0, 60.0]), defenders) == 0  # sideways pass
+    assert _bypassed(passer, np.array([52.0, 64.0]), defenders) == 0  # mostly sideways, a bit forward
