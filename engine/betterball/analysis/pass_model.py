@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 
 LOFT_DISTANCE = 35.0     # passes longer than this are lofted by default
+BLOCK_RADIUS = 2.0       # m: defenders this close to the ball's path need no reaction time
 PARAMS_FILE = Path(__file__).with_name("pass_params.json")
 
 
@@ -124,7 +125,10 @@ def pass_success(
 
     drift = defenders_pos + defenders_vel * pp.reaction
     dist = np.linalg.norm(path[None, :, :] - drift[:, None, :], axis=-1)  # (n_def, n_pts)
-    t_def = pp.reaction + dist / pp.max_speed
+    # A defender already standing in the lane just blocks it: reaction time only
+    # matters for points they have to move to reach.
+    raw = np.linalg.norm(path[None, :, :] - defenders_pos[:, None, :], axis=-1)
+    t_def = pp.reaction * np.clip(raw / BLOCK_RADIUS, 0.0, 1.0) + dist / pp.max_speed
 
     # 1) Lane interception — every point except the final contest point.
     lane_mask = k < 0.97

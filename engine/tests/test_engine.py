@@ -3,6 +3,10 @@ import pytest
 
 from betterball import pitch
 from betterball.analysis import evaluate_decision, pass_success, xg, xt
+from betterball.analysis.pass_model import PassParams
+
+# Physics tests use the default (hand-set) parameters, not the ones fitted to simulated data.
+BASE = PassParams()
 from betterball.analysis.report import analyze_match
 from betterball.sim import simulate
 
@@ -35,18 +39,22 @@ def test_open_pass_is_likely_and_blocked_pass_is_not():
     target = np.array([65.0, 34.0])
     far_defenders = np.array([[50.0, 5.0], [80.0, 60.0]])
     blocking = np.array([[57.5, 34.0], [80.0, 60.0]])
-    open_p = pass_success(passer, target, target, np.zeros(2), far_defenders, _no_vel(2)).p_success
-    blocked_p = pass_success(passer, target, target, np.zeros(2), blocking, _no_vel(2)).p_success
+    open_p = pass_success(passer, target, target, np.zeros(2), far_defenders, _no_vel(2), params=BASE).p_success
+    blocked_p = pass_success(passer, target, target, np.zeros(2), blocking, _no_vel(2), params=BASE).p_success
     assert open_p > 0.85
     assert blocked_p < open_p - 0.2
+    # The fitted model must agree that a defender standing in the lane matters.
+    fitted_open = pass_success(passer, target, target, np.zeros(2), far_defenders, _no_vel(2)).p_success
+    fitted_blocked = pass_success(passer, target, target, np.zeros(2), blocking, _no_vel(2)).p_success
+    assert fitted_blocked < fitted_open - 0.2
 
 
 def test_keeper_advantage_inside_box():
     passer = np.array([80.0, 34.0])
     target = np.array([97.0, 34.0])
     keeper = np.array([[101.0, 34.0]])
-    with_hands = pass_success(passer, target, target - [2, 0], np.zeros(2), keeper, _no_vel(1), keeper=0).p_success
-    without = pass_success(passer, target, target - [2, 0], np.zeros(2), keeper, _no_vel(1)).p_success
+    with_hands = pass_success(passer, target, target - [2, 0], np.zeros(2), keeper, _no_vel(1), params=BASE, keeper=0).p_success
+    without = pass_success(passer, target, target - [2, 0], np.zeros(2), keeper, _no_vel(1), params=BASE).p_success
     assert with_hands < without
 
 
