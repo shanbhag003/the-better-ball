@@ -1,5 +1,5 @@
 import { ArrowRight, Check, ChevronRight, Info, RotateCcw, X } from "lucide-react";
-import { goalPct, minute, pct, VERDICT } from "../labels";
+import { explain, goalPct, minute, pct, VERDICT } from "../labels";
 import type { Decision, Match, Option } from "../types";
 
 interface Props {
@@ -21,7 +21,7 @@ export function DecisionCard({ match, d, onReplay, onNext, nextLabel, onFinish, 
       <div className="dc-head">
         <span className={`verdict ${v.tone}`}>{missed ? null : <Check size={14} />}{v.label}</span>
         <span className="muted">{minute(d.t)}</span>
-        <span className="dc-hint muted">{v.hint}</span>
+        <span className="dc-hint muted">{explain(d)}</span>
         <button className="icon-btn sm" onClick={onClose} aria-label="Close"><X size={16} /></button>
       </div>
       <div className="dc-who">

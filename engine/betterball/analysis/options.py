@@ -31,6 +31,7 @@ MIN_PROGRESS = 5.0      # m forward before a pass can beat anyone
 # Decision-cost bands (goal-probability units)
 OPTIMAL = 0.004
 GOOD = 0.012
+SAFER_MARGIN = 0.05  # success-probability edge needed to call an option "safer"
 
 
 def _frame_arrays(event: dict, players: list[dict]):
@@ -186,12 +187,18 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
         verdict = "should_shoot"
     elif chosen["kind"] == "shot":
         verdict = "should_pass"
-    elif chosen["p_success"] < 0.6 and best["p_success"] > chosen["p_success"]:
-        verdict = "too_risky"
-    elif best["xt_target"] > chosen["xt_target"]:
-        verdict = "missed_progression"
     else:
-        verdict = "suboptimal"
+        # Compare the two passes on both axes: how likely to arrive, how dangerous if it does.
+        safer = best["p_success"] > chosen["p_success"] + SAFER_MARGIN
+        sharper = best["xt_target"] > chosen["xt_target"]
+        if safer and sharper:
+            verdict = "clear_upgrade"       # better on both counts
+        elif sharper:
+            verdict = "missed_progression"  # played safe, a more dangerous pass was on
+        elif safer:
+            verdict = "too_risky"           # gambled on a long shot, a safer pass was worth more
+        else:
+            verdict = "suboptimal"
 
     return {
         "event_id": event["id"],

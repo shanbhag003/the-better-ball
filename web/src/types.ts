@@ -2,6 +2,7 @@ export type Verdict =
   | "optimal"
   | "good"
   | "missed_progression"
+  | "clear_upgrade"
   | "too_risky"
   | "should_shoot"
   | "should_pass"
