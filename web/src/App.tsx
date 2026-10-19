@@ -187,10 +187,6 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
         />
       </main>
 
-      <footer className="foot muted small">
-        Synthetic match · fictional clubs and players · <kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> 5s · <kbd>N</kbd> next moment
-      </footer>
-
       {onboarding && (
         <Onboarding
           onDone={(tour) => {
@@ -218,7 +214,10 @@ function Header({ match, pb, onHelp }: { match: Match; pb: Playback; onHelp: () 
             <path d="M12 7l4 3-1.5 4.5h-5L8 10z" fill="currentColor" />
           </svg>
         </span>
-        <span className="brand-name">The Better Ball</span>
+        <span className="brand-text">
+          <span className="brand-name">The Better Ball</span>
+          <span className="brand-sub">Synthetic match · fictional clubs</span>
+        </span>
       </div>
 
       <div className="scoreboard" aria-live="polite">

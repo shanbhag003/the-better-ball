@@ -7,8 +7,9 @@ import type { Decision, Match } from "../types";
 const L = 105;
 const W = 68;
 const MARGIN = 3.5;
-const BETTER = "#3df29c";
+const BETTER = "#00ff85";
 const PLAYED = "#ffffff";
+const FONT = `"Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif`;
 const FADE = 1.6; // seconds a pass overlay stays visible during playback
 
 interface Props {
@@ -38,8 +39,10 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
     const wrap = wrapRef.current!;
     const canvas = canvasRef.current!;
     const fit = () => {
+      // The wrapper is sized by the layout; the pitch keeps its aspect inside it.
       const w = wrap.clientWidth;
-      const h = Math.min(window.innerHeight * 0.64, (w * (W + MARGIN * 2)) / (L + MARGIN * 2));
+      const ideal = (w * (W + MARGIN * 2)) / (L + MARGIN * 2);
+      const h = wrap.clientHeight > 40 ? Math.min(wrap.clientHeight, ideal) : ideal;
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
@@ -98,7 +101,7 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
           });
           const label = d.best.kind === "shot" ? `Shoot · ${pct(d.best.p)}` : `Better · ${pct(d.best.p)}`;
           const [lx, ly] = beyond(X(from[0]), Y(from[1]), X(d.best.target[0]), Y(d.best.target[1]), 30);
-          pill(ctx, lx, ly, label, BETTER, "#06261a", alpha);
+          pill(ctx, lx, ly, label, BETTER, "#2a0030", alpha);
           if (d.best.receiver !== null) rings.set(d.best.receiver, { color: BETTER, alpha: alpha * (0.6 + 0.4 * pulse) });
         }
         arrow(ctx, X(from[0]), Y(from[1]), X(d.chosen.target[0]), Y(d.chosen.target[1]), {
@@ -107,7 +110,7 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
         if (sticky || better) {
           const lbl = d.chosen.kind === "shot" ? `Shot · ${pct(d.chosen.p)}` : `Played · ${pct(d.chosen.p)}`;
           const [lx, ly] = beyond(X(from[0]), Y(from[1]), X(d.chosen.target[0]), Y(d.chosen.target[1]), 30);
-          pill(ctx, lx, ly, lbl, "#ffffff", "#0b0f14", alpha);
+          pill(ctx, lx, ly, lbl, "#ffffff", "#1a0020", alpha);
         }
         rings.set(d.player, { color: "#ffffff", alpha: alpha * 0.9 });
       }
@@ -142,7 +145,7 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
         ctx.strokeStyle = p.role === "GK" ? "#fff6" : "#0006";
         ctx.stroke();
         ctx.fillStyle = "#fff";
-        ctx.font = `700 ${Math.round(r * 0.95)}px Inter, system-ui, sans-serif`;
+        ctx.font = `700 ${Math.round(r * 0.95)}px ${FONT}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(String(p.number), cx, cy + 0.5);
@@ -182,7 +185,8 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
         best = i;
       }
     });
-    setHover(best >= 0 ? { player: best, x: mx, y: my } : null);
+    const wr = wrapRef.current!.getBoundingClientRect();
+    setHover(best >= 0 ? { player: best, x: e.clientX - wr.left, y: e.clientY - wr.top } : null);
   };
 
   const hp = hover ? match.players[hover.player] : null;
@@ -309,7 +313,7 @@ function beyond(x1: number, y1: number, x2: number, y2: number, dist: number): [
 function pill(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bg: string, fg: string, alpha: number) {
   ctx.save();
   ctx.globalAlpha = Math.max(0, alpha);
-  ctx.font = "600 12px Inter, system-ui, sans-serif";
+  ctx.font = `600 12px ${FONT}`;
   const w = ctx.measureText(text).width + 16;
   const h = 22;
   ctx.beginPath();

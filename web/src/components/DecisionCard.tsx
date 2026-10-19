@@ -19,6 +19,7 @@ export function DecisionCard({ match, d, onReplay, onNext, onClose }: Props) {
       <div className="dc-head">
         <span className={`verdict ${v.tone}`}>{missed ? null : <Check size={14} />}{v.label}</span>
         <span className="muted">{minute(d.t)}</span>
+        <span className="dc-hint muted">{v.hint}</span>
         <button className="icon-btn sm" onClick={onClose} aria-label="Close"><X size={16} /></button>
       </div>
       <div className="dc-who">

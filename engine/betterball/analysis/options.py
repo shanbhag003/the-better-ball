@@ -25,6 +25,8 @@ from .xt import xt, xt_against
 SHOT_RANGE = 32.0
 SPACE_LEAD = 6.0  # metres ahead of a runner for a pass into space
 MAX_SPACE_X = 98.0
+BYPASS_CORRIDOR = 10.0  # m either side of the pass line
+MIN_PROGRESS = 5.0      # m forward before a pass can beat anyone
 
 # Decision-cost bands (goal-probability units)
 OPTIMAL = 0.004
@@ -41,11 +43,20 @@ def _frame_arrays(event: dict, players: list[dict]):
     return pos, vel, team, is_gk
 
 
-def _bypassed(passer_x: float, target_x: float, opp_pos: np.ndarray) -> int:
-    lo, hi = sorted((passer_x, target_x))
-    if target_x <= passer_x:
+def _bypassed(passer: np.ndarray, target: np.ndarray, outfield_opp: np.ndarray) -> int:
+    """Outfield defenders the pass takes out of the game.
+
+    A defender counts when he was goal-side of the ball before the pass, is
+    behind the ball after it, and was close enough to the pass to matter
+    (within ``BYPASS_CORRIDOR`` metres of its line). Sideways or backward
+    passes beat nobody.
+    """
+    if target[0] - passer[0] < MIN_PROGRESS:
         return 0
-    return int(np.sum((opp_pos[:, 0] > lo) & (opp_pos[:, 0] < hi)))
+    x = outfield_opp[:, 0]
+    between = (x > passer[0] + 0.5) & (x < target[0] - 1.0)
+    near_line = pitch.point_segment_distance(outfield_opp, passer, target) <= BYPASS_CORRIDOR
+    return int(np.sum(between & near_line))
 
 
 def _score_pass(passer_xy, target, recv_idx, pos, vel, opp_idx, keeper, lofted=None):
@@ -98,7 +109,7 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
                 "xt_target": round(gain, 4),
                 "xt_added": round(ev - xt_here, 4),
                 "ev": round(ev, 4),
-                "bypassed": _bypassed(passer_xy[0], target[0], pos[opp_idx]),
+                "bypassed": _bypassed(passer_xy, target, opp_outfield),
                 "threat_defender": threat,
             })
 
@@ -140,7 +151,7 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
             "xt_target": round(gain, 4),
             "xt_added": round(ev - xt_here, 4),
             "ev": round(ev, 4),
-            "bypassed": _bypassed(passer_xy[0], target[0], pos[opp_idx]),
+            "bypassed": _bypassed(passer_xy, target, opp_outfield),
             "threat_defender": threat,
         }
 

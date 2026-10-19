@@ -41,9 +41,9 @@ FORMATIONS: dict[str, list[tuple[str, str, float, float]]] = {
 
 TEAMS = [
     {"name": "Northbridge Rovers", "short": "NBR", "formation": "4-3-3", "style": "possession",
-     "risk": 0.30, "press": 0.65, "color": "#e4572e"},
+     "risk": 0.30, "press": 0.65, "color": "#f25022"},
     {"name": "Harbour City", "short": "HBC", "formation": "4-2-3-1", "style": "direct",
-     "risk": 0.50, "press": 0.55, "color": "#17bebb"},
+     "risk": 0.50, "press": 0.55, "color": "#00a4ef"},
 ]
 
 _FIRST = ["Ari", "Ben", "Cal", "Dario", "Eli", "Femi", "Gus", "Hugo", "Ivo", "Jonah", "Kai", "Luca",

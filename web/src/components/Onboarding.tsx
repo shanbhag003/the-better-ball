@@ -8,8 +8,8 @@ const STEPS: { icon: ReactNode; title: string; text: string; visual: ReactNode }
     text: "A full 90 minutes. Every pass tracked.",
     visual: (
       <div className="ob-visual dots">
-        <span style={{ background: "#e4572e" }} />
-        <span style={{ background: "#17bebb" }} />
+        <span style={{ background: "#f25022" }} />
+        <span style={{ background: "#00a4ef" }} />
         <span className="ball" />
       </div>
     ),

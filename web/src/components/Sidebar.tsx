@@ -1,6 +1,6 @@
-import { Play, Sparkles, Users } from "lucide-react";
+import { CircleHelp, Play, Sparkles, Users } from "lucide-react";
 import { useMemo, useState } from "react";
-import { goalPct, minute, VERDICT } from "../labels";
+import { GUIDE, goalPct, minute, VERDICT } from "../labels";
 import type { Decision, Match } from "../types";
 
 interface Props {
@@ -34,6 +34,7 @@ export function Sidebar(props: Props) {
 
 function Moments({ match, moments, activeId, onMoment, onTour, playerFilter, setPlayerFilter, teamFilter, setTeamFilter }: Props) {
   const fp = playerFilter !== null ? match.players[playerFilter] : null;
+  const [guide, setGuide] = useState(false);
   return (
     <div className="panel">
       <button className="btn primary wide" onClick={onTour} disabled={!moments.length}>
@@ -53,7 +54,25 @@ function Moments({ match, moments, activeId, onMoment, onTour, playerFilter, set
             #{fp.number} {fp.name.split(" ")[1]} ✕
           </button>
         )}
+        <button className={`chip guide-btn ${guide ? "on" : ""}`} onClick={() => setGuide(!guide)} aria-expanded={guide}>
+          <CircleHelp size={13} /> Labels
+        </button>
       </div>
+
+      {guide && (
+        <div className="guide pop">
+          {GUIDE.map((k) => (
+            <div key={k} className="guide-row">
+              <span className={`verdict sm ${VERDICT[k].tone}`}>{VERDICT[k].label}</span>
+              <span className="muted small">{VERDICT[k].hint}</span>
+            </div>
+          ))}
+          <div className="guide-row">
+            <span className="gain">+8%</span>
+            <span className="muted small">Goal chance the better option adds</span>
+          </div>
+        </div>
+      )}
 
       <div className="list">
         {moments.length === 0 && <div className="empty">No missed chances here 👏</div>}
@@ -64,7 +83,7 @@ function Moments({ match, moments, activeId, onMoment, onTour, playerFilter, set
             <button key={d.id} className={`moment-card ${activeId === d.id ? "active" : ""}`} onClick={() => onMoment(d)}>
               <span className="min">{minute(d.t)}</span>
               <span className="mc-body">
-                <span className={`verdict sm ${v.tone}`}>{v.label}</span>
+                <span className={`verdict sm ${v.tone}`} title={v.hint}>{v.label}</span>
                 <span className="who">
                   <span className="dot" style={{ background: match.teams[p.team].color }} />
                   #{p.number} {p.name}

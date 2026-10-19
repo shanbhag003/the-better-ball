@@ -76,3 +76,18 @@ def test_decision_analysis(short_match):
     assert 0 <= res["chosen"]["p_success"] <= 1
     report = analyze_match(short_match)
     assert report["decisions"] and set(report["teams"]) == {"0", "1"}
+
+
+def test_bypassed_counts_only_defenders_near_the_pass():
+    from betterball.analysis.options import _bypassed
+
+    passer, target = np.array([40.0, 34.0]), np.array([70.0, 34.0])
+    defenders = np.array([
+        [50.0, 36.0],  # in the lane: beaten
+        [60.0, 28.0],  # near the lane: beaten
+        [55.0, 5.0],   # far wing: not involved
+        [75.0, 34.0],  # still goal-side of the receiver
+        [30.0, 34.0],  # already behind the ball
+    ])
+    assert _bypassed(passer, target, defenders) == 2
+    assert _bypassed(passer, np.array([42.0, 60.0]), defenders) == 0  # sideways pass
