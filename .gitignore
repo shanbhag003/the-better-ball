@@ -12,3 +12,4 @@ node_modules/
 data/*.json
 !data/README.md
 .DS_Store
+web/dist/

@@ -59,7 +59,15 @@ Typical 90-minute output: 1,500–1,650 passes at 73–84% completion, 12–19 s
 
 Verdicts: `optimal` · `good` · `missed_progression` · `too_risky` · `should_shoot` · `should_pass`.
 
-### 3. Agents and app (in progress)
+### 3. Pitch replay (`web/`)
+A React app that replays the match on an animated 2D pitch:
+- **Played pass:** a solid white arrow. **Better option:** a glowing dashed green arrow, each labelled with its success %.
+- **Key moments:** the biggest missed chances, shown as amber markers on the timeline and as a list. A guided tour plays the build-up, pauses, and explains each one.
+- **Decision card:** played option vs better option, showing chance the pass arrives, goal chance, and how much goal chance was missed.
+- **Players tab:** each player's share of smart decisions. Click a player to see their own moments.
+- First-run walkthrough, keyboard shortcuts, and a mobile layout.
+
+### 4. Agents (in progress)
 - **Tactical Analyst agent:** uses the decision engine as a tool (MCP) and finds the key moments.
 - **Narrator agent:** explains each moment for an *analyst* or a *fan* audience.
 - **Coach agent:** writes half-time and full-time decision reports per player.
@@ -80,6 +88,10 @@ python -m betterball.cli run --seed 7 --outdir ../data
 python -m betterball.analysis.calibrate ../data/match_7.json ../data/match_11.json ../data/match_23.json
 
 pytest
+
+# export a replay bundle and run the web app
+python -m betterball.cli export ../data/match_7.json ../data/analysis_7.json --out ../web/public/data/match_7.json
+cd ../web && npm install && npm run dev
 ```
 
 Outputs:
@@ -89,8 +101,8 @@ Outputs:
 ## Repository layout
 ```
 engine/      Python: synthetic match engine + decision analysis
+web/         React + Vite pitch replay (canvas)
 agents/      Foundry agents (coming next)
-web/         Front-end (coming next)
 data/        Generated matches (git-ignored)
 ```
 

@@ -3,6 +3,7 @@
     python -m betterball.cli simulate --seed 7 --out ../data/match_7.json
     python -m betterball.cli analyze ../data/match_7.json --out ../data/analysis_7.json
     python -m betterball.cli run --seed 7 --outdir ../data
+    python -m betterball.cli export ../data/match_7.json ../data/analysis_7.json --out ../web/public/data/match_7.json
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from collections import Counter
 from pathlib import Path
 
 from .analysis.report import analyze_match
+from .export import build_bundle
 from .sim import simulate
 
 
@@ -60,7 +62,18 @@ def main(argv=None):
     r.add_argument("--fps", type=int, default=5)
     r.add_argument("--outdir", type=Path, default=Path("data"))
 
+    e = sub.add_parser("export", help="write a compact replay bundle for the web app")
+    e.add_argument("match", type=Path)
+    e.add_argument("analysis", type=Path)
+    e.add_argument("--out", type=Path, required=True)
+
     args = ap.parse_args(argv)
+
+    if args.cmd == "export":
+        match = json.loads(args.match.read_text(encoding="utf-8"))
+        report = json.loads(args.analysis.read_text(encoding="utf-8"))
+        _dump(build_bundle(match, report), args.out)
+        return
 
     if args.cmd in ("simulate", "run"):
         t0 = time.time()
