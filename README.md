@@ -5,8 +5,8 @@
 The Better Ball replays a (synthetic) football match and checks every on-ball decision.
 For each pass it computes the probability that each available option would succeed and the
 threat it would create, then compares the option the player chose with the best one available.
-AI agents turn those numbers into plain-language explanations: tactical detail for coaches and
-analysts, and a simple story for fans.
+Next, AI agents built on Microsoft Foundry will turn those numbers into plain-language explanations:
+tactical detail for coaches and analysts, and a simple story for fans.
 
 Built for the [Microsoft × Premier League "Inside the Game" Hackathon](https://github.com/microsoft/insidethegamehackathon).
 
@@ -17,14 +17,14 @@ Built for the [Microsoft × Premier League "Inside the Game" Hackathon](https://
 ```
  ┌──────────────────────┐   tracking + events    ┌─────────────────────────┐
  │ Synthetic match      │ ─────────────────────▶ │ Decision engine         │
- │ engine (22 agents,   │   freeze frame at       │  • P(pass success)      │
- │ 10 Hz, bounded-      │   every pass & shot     │  • Expected Threat (xT) │
- │ rational decisions)  │                         │  • Expected Goals (xG)  │
+ │ engine (22 simulated │   freeze frame at       │  • P(pass success)      │
+ │ players, 10 Hz, rule-│   every pass & shot     │  • Expected Threat (xT) │
+ │ based decisions)     │                         │  • Expected Goals (xG)  │
  └──────────────────────┘                         │  • option ranking       │
                                                   └───────────┬─────────────┘
                                                               │ decisions.json
                                     ┌─────────────────────────▼─────────────────────────┐
-                                    │ Agent layer (Microsoft Foundry / Agent Framework)  │
+                                    │ AI agent layer (planned): Microsoft Foundry        │
                                     │  Tactical Analyst · Narrator · Coach · Q&A         │
                                     └─────────────────────────┬─────────────────────────┘
                                                               │
@@ -36,8 +36,8 @@ Built for the [Microsoft × Premier League "Inside the Game" Hackathon](https://
 ```
 
 ### 1. Synthetic match engine (`engine/betterball/sim`)
-The hackathon requires synthetic data, so we built a match generator. 22 agent-players and a ball are
-simulated at 10 Hz:
+The hackathon requires synthetic data, so we built a match generator. It simulates 22 players and a ball
+at 10 Hz. The players are rule-based simulation entities, not AI or LLM agents:
 - **Team shape:** formations (4-3-3, 4-2-3-1) slide with the ball, hold a defensive line, and keep their lines compact out of possession.
 - **Off-ball behaviour:** pressing, cover, partial man-marking, attacking runs in behind, and recovery runs.
 - **Ball physics:** rolling resistance, lofted passes with flight arcs, interceptions, aerial duels, keepers claiming balls, and restarts.
@@ -59,21 +59,29 @@ Typical 90-minute output: 1,500–1,650 passes at 73–84% completion, 12–19 s
 | **Offside** (`pitch.py`) | Team-mates in an offside position at the moment of the pass are never suggested as the better option, and a pass to one is rated *Offside*. |
 | **Report** (`report.py`) | Per-player and per-team decision scores, "xT left on the table", and the key moments ranked by decision cost. |
 
-Verdicts: `optimal` · `good` · `missed_progression` · `too_risky` · `should_shoot` · `should_pass`.
+Verdicts: `optimal` · `good` · `clear_upgrade` (the other pass was safer **and** more dangerous) · `missed_progression` (played safe) · `too_risky` (a gamble) · `should_shoot` · `should_pass` · `offside`.
 
 ### 3. Pitch replay (`web/`)
 A React app that replays the match on an animated 2D pitch:
 - **Played pass:** a solid white arrow. **Better option:** a glowing dashed green arrow, each labelled with its success %.
 - **Key moments:** the biggest missed chances, shown as amber markers on the timeline and as a list. A guided tour plays the build-up, pauses, and explains each one.
 - **Decision card:** played option vs better option, showing chance the pass arrives, goal chance, and how much goal chance was missed.
-- **Players tab:** each player's share of smart decisions. Click a player to see their own moments.
+- **Players tab:** each player's share of good decisions. Click a player to see their own moments.
 - First-run walkthrough, keyboard shortcuts, and a mobile layout.
 
-### 4. Agents (in progress)
-- **Tactical Analyst agent:** uses the decision engine as a tool (MCP) and finds the key moments.
-- **Narrator agent:** explains each moment for an *analyst* or a *fan* audience.
-- **Coach agent:** writes half-time and full-time decision reports per player.
-- **Web app:** an animated 2D pitch showing the chosen pass (solid) and the better option (glowing dashed) with probabilities, plus a decision timeline.
+### 4. Where AI is used
+
+| Today | How |
+|---|---|
+| **Machine-learned pass model** | The pass model's physical parameters are *learned* from about 5,000 simulated passes by minimising log-loss (`calibrate.py`), then validated on held-out passes. Brier score 0.138 vs 0.160 for a constant baseline. |
+| **Decision intelligence** | An algorithmic search over every option at every pass (expected value, threat, interception risk). This is analytics, not generative AI. |
+
+| Next (planned, Microsoft Foundry + Agent Framework) | What it does |
+|---|---|
+| **Tactical Analyst agent** | Calls the decision engine as tools through an MCP server (key moments, option scores, player reports) and picks out the patterns behind a result. |
+| **Narrator agent** | Turns each moment's numbers into a short explanation, in *analyst* or *fan* voice and in several languages. |
+| **Coach agent** | Writes half-time and full-time decision reports per player and per team. |
+| **Ask the match (Q&A)** | Answers questions like "Why did Northbridge lose?" or "Show me #8's riskiest passes", grounded in the engine's data. |
 
 ---
 
@@ -104,7 +112,7 @@ Outputs:
 ```
 engine/      Python: synthetic match engine + decision analysis
 web/         React + Vite pitch replay (canvas)
-agents/      Foundry agents (coming next)
+agents/      Foundry agents (planned)
 data/        Generated matches (git-ignored)
 ```
 
