@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "betterball"
+version = "0.1.0"
+description = "Synthetic football match engine and pass-decision analysis for The Better Ball"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "scipy>=1.11"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+betterball = "betterball.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["betterball*"]
+
+[tool.setuptools.package-data]
+"betterball.analysis" = ["pass_params.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
