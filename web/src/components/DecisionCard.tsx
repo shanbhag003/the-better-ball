@@ -89,6 +89,7 @@ const OUTCOME: Record<string, string> = {
   complete: "Completed",
   intercepted: "Intercepted",
   out: "Out of play",
+  offside: "Offside",
   goal: "Goal",
   saved: "Saved",
   off_target: "Off target",

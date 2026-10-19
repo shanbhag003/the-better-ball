@@ -95,9 +95,16 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
     keeper = int(np.where(is_gk[opp_idx])[0][0]) if is_gk[opp_idx].any() else None
     xt_here = float(xt(passer_xy))
 
+    # Law 11: team-mates in an offside position at the moment of the pass are not real options.
+    exempt = event.get("set_piece") in pitch.OFFSIDE_EXEMPT
+    line = pitch.offside_line(pos, opp_idx, passer_xy[0])
+    offside = set() if exempt else pitch.offside_players(pos, mates, opp_idx, passer_xy[0], me)
+
     options: list[dict] = []
 
     for j in mates:
+        if j in offside:
+            continue
         # Lead the receiver by their velocity over the ball's flight time.
         d0 = float(np.linalg.norm(pos[j] - passer_xy))
         lead = pitch.clamp_to_pitch(pos[j] + vel[j] * flight_time(d0), 1.0)
@@ -169,6 +176,11 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
                 "beaten": beaten(target),
             "threat_defender": threat,
         }
+        if recv in offside:
+            # Flagged offside: possession goes straight to the opponents at the receiver's spot.
+            chosen.update({"p_success": 0.0, "offside": True, "bypassed": 0, "beaten": [],
+                           "ev": round(-float(xt_against(pos[recv])), 4)})
+            chosen["xt_added"] = round(chosen["ev"] - xt_here, 4)
 
     options.sort(key=lambda o: o["ev"], reverse=True)
     best = options[0] if options else chosen
@@ -179,7 +191,9 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
     safe = [o for o in options if o["kind"] == "pass" and o["p_success"] >= 0.8]
     best_safe = max(safe, key=lambda o: o["ev"]) if safe else None
 
-    if cost < OPTIMAL:
+    if chosen.get("offside"):
+        verdict = "offside"
+    elif cost < OPTIMAL:
         verdict = "optimal"
     elif cost < GOOD:
         verdict = "good"
@@ -208,6 +222,8 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
         "best_safe": best_safe,
         "decision_cost": round(cost, 4),
         "verdict": verdict,
+        "offside_line": None if exempt else round(float(pitch.from_attacking_frame(np.array([line, 0.0]), event["attack_dir"])[0]), 2),
+        "offside_players": sorted(offside),
         "top_options": options[:5],
         "n_options": len(options),
     }

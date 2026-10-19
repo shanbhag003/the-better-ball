@@ -74,3 +74,24 @@ def point_segment_distance(points: np.ndarray, a: np.ndarray, b: np.ndarray) -> 
     t = np.clip(((points - a) @ ab) / denom, 0.0, 1.0)
     proj = a + t[:, None] * ab
     return np.linalg.norm(points - proj, axis=-1)
+
+
+# Restarts from which a player cannot be offside (Law 11).
+OFFSIDE_EXEMPT = {"throw_in", "goal_kick", "corner"}
+
+
+def offside_line(att_pos: np.ndarray, defenders: np.ndarray, ball_x: float) -> float:
+    """x (attacking frame) beyond which an attacker is in an offside position.
+
+    Law 11: a player is offside if, when the ball is played, they are in the
+    opponents' half and nearer the goal line than both the ball and the
+    second-last opponent (the keeper usually being the last).
+    """
+    xs = np.sort(att_pos[defenders, 0])[::-1]
+    second_last = xs[1] if len(xs) > 1 else xs[0]
+    return float(max(second_last, ball_x, HALF_LENGTH))
+
+
+def offside_players(att_pos: np.ndarray, attackers, defenders: np.ndarray, ball_x: float, passer: int) -> set[int]:
+    line = offside_line(att_pos, defenders, ball_x)
+    return {int(j) for j in attackers if j != passer and att_pos[j, 0] > line}

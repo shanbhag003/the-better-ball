@@ -3,6 +3,7 @@ export type Verdict =
   | "good"
   | "missed_progression"
   | "clear_upgrade"
+  | "offside"
   | "too_risky"
   | "should_shoot"
   | "should_pass"
@@ -35,7 +36,8 @@ export interface Option {
   xt: number;
   ev: number;
   bypassed: number;
-  beaten: number[]; // defenders this pass takes out of the game
+  beaten: number[];
+  offside?: boolean; // defenders this pass takes out of the game
   threat: number | null;
 }
 
@@ -54,6 +56,8 @@ export interface Decision {
   best: Option;
   alts: Option[];
   start: [number, number];
+  offside_line: number | null; // raw pitch x of the offside line when the ball was played
+  offside_players: number[]; // team-mates standing offside at that moment
 }
 
 export interface MatchEvent {

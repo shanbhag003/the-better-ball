@@ -155,6 +155,9 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
               {showCard && (selected!.chosen.beaten?.length || selected!.best.beaten?.length) ? (
                 <span><i className="ring" /> Defender beaten</span>
               ) : null}
+              {showCard && selected!.offside_line !== null && selected!.offside_line !== undefined && (
+                <span><i className="offline" /> Offside line</span>
+              )}
               <span className="muted">Hover a player for details</span>
             </div>
             <Pitch match={match} pb={pb} selected={selected} showBetter={showBetter} />

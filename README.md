@@ -41,6 +41,7 @@ simulated at 10 Hz:
 - **Team shape:** formations (4-3-3, 4-2-3-1) slide with the ball, hold a defensive line, and keep their lines compact out of possession.
 - **Off-ball behaviour:** pressing, cover, partial man-marking, attacking runs in behind, and recovery runs.
 - **Ball physics:** rolling resistance, lofted passes with flight arcs, interceptions, aerial duels, keepers claiming balls, and restarts.
+- **Laws of the game:** offside (Law 11) is called when the ball is played, giving an indirect free kick. Throw-ins, goal kicks and corners are exempt. Players usually spot a team-mate standing offside, but not always (about 4–5 offsides per match).
 - **Bounded rationality:** players choose with a noisy heuristic (lane openness, receiver space, progression) that differs from the analysis model, shaped by their own vision, risk appetite and passing skill. That gap is what makes "was there a better option?" a meaningful question.
 
 Every pass and shot event carries a **freeze frame**: the positions and velocities of all 22 players at the moment the ball was played.
@@ -55,6 +56,7 @@ Typical 90-minute output: 1,500–1,650 passes at 73–84% completion, 12–19 s
 | **xT** (`xt.py`) | Smooth Expected Threat surface: how dangerous it is to have the ball at each location. |
 | **xG** (`xg.py`) | Logistic model on distance, angle, defenders blocking the goal, and headers. |
 | **Options** (`options.py`) | For each decision it scores passes to every teammate (to feet, and into space ahead of runners) plus a shot. `EV = P(success)·xT(target) − P(fail)·xT_against(turnover spot)`, and **decision cost = EV(best) − EV(chosen)**. |
+| **Offside** (`pitch.py`) | Team-mates in an offside position at the moment of the pass are never suggested as the better option, and a pass to one is rated *Offside*. |
 | **Report** (`report.py`) | Per-player and per-team decision scores, "xT left on the table", and the key moments ranked by decision cost. |
 
 Verdicts: `optimal` · `good` · `missed_progression` · `too_risky` · `should_shoot` · `should_pass`.

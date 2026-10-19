@@ -425,6 +425,8 @@ class MatchEngine:
         risk, vision = self.a("risk", i), self.a("vision", i)
         near = self.nearest_opp_dist(i)
         dead = s.dead_kind is not None
+        offside = set() if s.dead_kind in pitch.OFFSIDE_EXEMPT else pitch.offside_players(
+            P, self.mates(i), opp, self.att(s.ball, team)[0], i)
 
         options: list[tuple[float, str, int | None, np.ndarray]] = []
 
@@ -436,6 +438,9 @@ class MatchEngine:
 
         for j in self.mates(i):
             if self.is_gk[j] and not (near < 4 and me[0] < 40):
+                continue
+            # Players mostly spot a team-mate standing offside; sometimes they don't.
+            if j in offside and self.rng.random() < 0.9 + 0.09 * vision:
                 continue
             cand = [P[j] + V[j] * 0.6]
             if V[j][0] > 2.5 and self.rng.random() < vision:
@@ -477,10 +482,11 @@ class MatchEngine:
         if kind == "shot":
             self.shoot(i)
         else:
-            self.pass_ball(i, j, self.raw(tgt, team))
-        s.dead_kind = None
+            self.pass_ball(i, j, self.raw(tgt, team), offside=j in offside)
+        if s.mode != "dead":  # an offside call has already set up the free kick
+            s.dead_kind = None
 
-    def pass_ball(self, i: int, j: int, target: np.ndarray):
+    def pass_ball(self, i: int, j: int, target: np.ndarray, offside: bool = False):
         s = self.s
         team = self.team[i]
         start = s.ball.copy() if s.mode == "dead" else self.pos[i].copy()
@@ -507,6 +513,14 @@ class MatchEngine:
             set_piece=s.dead_kind,
             freeze_frame=self.freeze(),
         )
+        if offside:
+            # Flag goes up as soon as the ball is played: indirect free kick where the receiver stood.
+            ev["outcome"] = "offside"
+            ev["end"] = self.pos[j].round(2).tolist()
+            self.log("offside", j, start=self.pos[j].round(2).tolist())
+            spot = pitch.clamp_to_pitch(self.pos[j], 1.0)
+            self.go_dead("free_kick", 1 - int(team), spot)
+            return
         self.launch(i, j, aim, lofted, ev, kind="pass")
 
     def launch(self, i, j, aim, lofted, ev, kind):

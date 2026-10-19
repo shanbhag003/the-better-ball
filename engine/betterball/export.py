@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from .analysis.options import GOOD
 
-EVENT_TYPES = {"pass", "shot", "goal", "tackle", "interception", "save", "kickoff"}
+EVENT_TYPES = {"pass", "shot", "goal", "tackle", "interception", "save", "kickoff", "offside"}
 
 
 def _opt(o: dict | None) -> dict | None:
@@ -64,6 +64,8 @@ def build_bundle(match: dict, report: dict) -> dict:
             "chosen": _opt(d["chosen"]),
             "best": _opt(d["best"]),
             "alts": [_opt(o) for o in d["top_options"][:3]],
+            "offside_line": d.get("offside_line"),
+            "offside_players": d.get("offside_players", []),
         }
 
     players = [{

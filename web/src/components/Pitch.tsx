@@ -9,8 +9,10 @@ const W = 68;
 const MARGIN = 3.5;
 const BETTER = "#00ff85";
 const PLAYED = "#ffffff";
+const OFFSIDE = "#ffb900";
 const FONT = `"Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif`;
-const FADE = 1.6; // seconds a pass overlay stays visible during playback
+const HOLD = 3.5; // real seconds a pass overlay stays readable during playback
+const HANDOFF = 0.35; // real seconds an older overlay takes to fade once a new pass is played
 
 interface Props {
   match: Match;
@@ -90,7 +92,23 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
       const showSel = selected && Math.abs(t - selected.t) < 0.25;
       const list: { d: Decision; alpha: number; sticky: boolean }[] = showSel
         ? [{ d: selected!, alpha: 1, sticky: true }]
-        : recentDecisions(match, t, FADE).map((d) => ({ d, alpha: 1 - (t - d.t) / FADE, sticky: false }));
+        : holdOverlays(recentDecisions(match, t, HOLD * pb.speed), t, pb.speed);
+
+      // Offside line at the moment of the pass, and a flag over anyone standing offside.
+      if (showSel && selected!.offside_line != null) {
+        const ox = X(selected!.offside_line);
+        ctx.save();
+        ctx.strokeStyle = OFFSIDE;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([7, 6]);
+        ctx.beginPath();
+        ctx.moveTo(ox, Y(W));
+        ctx.lineTo(ox, Y(0));
+        ctx.stroke();
+        ctx.restore();
+        pill(ctx, ox, Y(W) + 14, "Offside line", OFFSIDE, "#2a0030", 0.95);
+      }
 
       for (const { d, alpha, sticky } of list) {
         const better = showBetter && d.cost >= match.meta.good_threshold && d.best;
@@ -171,6 +189,7 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(String(p.number), cx, cy + 0.5);
+        if (showSel && selected!.offside_players?.includes(i)) flag(ctx, cx + r * 0.6, cy - r - 2);
         ctx.globalAlpha = 1;
       });
 
@@ -224,6 +243,24 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
       )}
     </div>
   );
+}
+
+/**
+ * The latest pass stays fully visible for HOLD real seconds (fading only at the
+ * end), so it is readable at any playback speed. When a newer pass is played the
+ * older one hands off quickly instead of cluttering the pitch.
+ */
+function holdOverlays(list: Decision[], t: number, speed: number) {
+  const hold = HOLD * speed;
+  const handoff = HANDOFF * speed;
+  return list
+    .map((d, k) => {
+      const next = list[k + 1];
+      let alpha = Math.min(1, (hold - (t - d.t)) / (hold * 0.2));
+      if (next) alpha = Math.min(alpha, 1 - (t - next.t) / handoff);
+      return { d, alpha, sticky: false };
+    })
+    .filter((o) => o.alpha > 0.01);
 }
 
 type XY = (v: number) => number;
@@ -323,6 +360,21 @@ function arrow(
   ctx.lineTo(x2 - Math.cos(ang + 0.42) * head, y2 - Math.sin(ang + 0.42) * head);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
+}
+
+/** Small assistant-referee flag marking a player in an offside position. */
+function flag(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - 14);
+  ctx.stroke();
+  ctx.fillStyle = OFFSIDE;
+  ctx.fillRect(x, y - 14, 9, 7);
   ctx.restore();
 }
 

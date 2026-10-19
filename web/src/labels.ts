@@ -9,10 +9,11 @@ export const VERDICT: Record<Verdict, { label: string; tone: "good" | "warn" | "
   should_shoot: { label: "Should shoot", tone: "warn", hint: "A shot was worth more than the pass" },
   should_pass: { label: "Should pass", tone: "warn", hint: "A pass was worth more than the shot" },
   suboptimal: { label: "Better option", tone: "info", hint: "Another pass was worth more" },
+  offside: { label: "Offside", tone: "bad", hint: "Passed to a team-mate in an offside position" },
 };
 
 /** Verdicts shown in the "what do labels mean" guide, in reading order. */
-export const GUIDE: Verdict[] = ["clear_upgrade", "missed_progression", "too_risky", "should_shoot", "should_pass", "good"];
+export const GUIDE: Verdict[] = ["clear_upgrade", "missed_progression", "too_risky", "should_shoot", "should_pass", "offside", "good"];
 
 export const pct = (p: number) => `${Math.round(p * 100)}%`;
 
@@ -39,6 +40,8 @@ export function explain(d: Decision): string {
       return `Only ${pct(c.p)} to arrive. A safer pass (${pct(b.p)}) had a bigger goal chance.`;
     case "should_shoot":
       return `Shooting gave a bigger goal chance (${chance}).`;
+    case "offside":
+      return `Receiver was past the offside line. Free kick to the opponents.`;
     case "should_pass":
       return `This shot: ${goalPct(c.ev)}. A pass gave ${goalPct(b.ev)}.`;
     default:

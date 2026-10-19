@@ -92,3 +92,22 @@ def test_bypassed_counts_only_defenders_near_the_pass():
     assert _bypassed(passer, target, defenders) == 2
     assert _bypassed(passer, np.array([42.0, 60.0]), defenders) == 0  # sideways pass
     assert _bypassed(passer, np.array([52.0, 64.0]), defenders) == 0  # mostly sideways, a bit forward
+
+
+def test_offside_law():
+    # Attacking frame: attackers 0-2, defenders 3-5 (5 is the keeper).
+    pos = np.array([
+        [60.0, 34.0],  # passer
+        [80.0, 30.0],  # beyond the second-last defender -> offside
+        [74.0, 40.0],  # level-ish but behind the line -> onside
+        [76.0, 34.0],  # defender
+        [70.0, 20.0],  # defender
+        [102.0, 34.0],  # keeper
+    ])
+    attackers, defenders = [0, 1, 2], np.array([3, 4, 5])
+    assert pitch.offside_line(pos, defenders, ball_x=60.0) == 76.0
+    assert pitch.offside_players(pos, attackers, defenders, 60.0, passer=0) == {1}
+    # Nobody is offside in their own half.
+    own_half = pos.copy()
+    own_half[:, 0] -= 40
+    assert pitch.offside_players(own_half, attackers, defenders, 20.0, passer=0) == set()
