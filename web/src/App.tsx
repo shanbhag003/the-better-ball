@@ -16,6 +16,7 @@ import type { Decision, Match } from "./types";
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/match_7.json`;
 const ONBOARD_KEY = "tbb-onboarded-v1";
+const HELP_KEY = "tbb-help-opened";
 const BROADCAST_OFF_KEY = "tbb-broadcast-off";
 const MUTE_KEY = "tbb-pundit-muted";
 const LEAD_IN = 4; // seconds of build-up shown before a key moment
@@ -91,6 +92,8 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
   const [playerFilter, setPlayerFilter] = useState<number | null>(null);
   const [onboarding, setOnboarding] = useState(() => !readFlag(ONBOARD_KEY));
+  // Nudge first-time visitors towards "How it works" until they open it once.
+  const [helpOpened, setHelpOpened] = useState(() => readFlag(HELP_KEY));
   const [started, setStarted] = useState(false);
   const [coach, setCoach] = useState(false); // spotlight walkthrough
   const [tourOn, setTourOn] = useState(false); // stepping through moments
@@ -204,7 +207,16 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
   return (
     <LiveContext.Provider value={live}>
     <div className="app">
-      <Header match={match} pb={pb} onHelp={() => setOnboarding(true)} />
+      <Header
+        match={match}
+        pb={pb}
+        nudge={!helpOpened && !touring}
+        onHelp={() => {
+          writeFlag(HELP_KEY);
+          setHelpOpened(true);
+          setOnboarding(true);
+        }}
+      />
 
       <main className="layout">
         <section className="stage">
@@ -312,7 +324,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
   );
 }
 
-function Header({ match, pb, onHelp }: { match: Match; pb: Playback; onHelp: () => void }) {
+function Header({ match, pb, nudge, onHelp }: { match: Match; pb: Playback; nudge: boolean; onHelp: () => void }) {
   usePlayback(pb);
   const [h, a] = match.teams;
   const score = scoreAt(match, pb.t);
@@ -341,7 +353,7 @@ function Header({ match, pb, onHelp }: { match: Match; pb: Playback; onHelp: () 
 
       <div className="head-right">
       <AiStatus />
-      <button className="btn ghost help" onClick={onHelp}>
+      <button className={`btn ghost help ${nudge ? "nudge" : ""}`} onClick={onHelp}>
         <CircleHelp size={16} /> <span>How it works</span>
       </button>
       </div>

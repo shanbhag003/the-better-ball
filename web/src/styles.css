@@ -608,3 +608,15 @@ select.lang option { background: var(--purple-deep); }
 .pundit-caption.waiting .pc-text { color: var(--muted); font-weight: 500; }
 .pundit-caption.waiting .pc-badge { animation: livepulse 1.4s ease-in-out infinite; }
 .lt-who { color: var(--muted); font-weight: 700; font-size: 13px; }
+
+/* ---------- first-visit nudge on "How it works" ---------- */
+.btn.help.nudge {
+  color: var(--purple); background: var(--cyan); border-color: var(--cyan);
+  animation: help-nudge 1.6s ease-in-out infinite;
+}
+.btn.help.nudge:hover { background: #fff; border-color: #fff; }
+@keyframes help-nudge {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(4,245,255,0.55); }
+  50% { box-shadow: 0 0 0 9px rgba(4,245,255,0); transform: scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) { .btn.help.nudge { animation: none; } }
