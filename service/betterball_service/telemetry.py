@@ -25,6 +25,8 @@ def setup_telemetry() -> bool:
     from azure.monitor.opentelemetry import configure_azure_monitor
 
     configure_azure_monitor(connection_string=conn, logger_name="betterball")
+    # The Azure SDK logs every HTTP call (including telemetry uploads) at INFO; keep the console readable.
+    logging.getLogger("azure").setLevel(logging.WARNING)
     enable_instrumentation(enable_sensitive_data=False)
     log.info("Azure Monitor telemetry enabled")
     return True

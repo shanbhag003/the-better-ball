@@ -125,6 +125,17 @@ class CoachIn(BaseModel):
     language: str = "English"
 
 
+@app.get("/")
+def root() -> dict:
+    return {
+        "service": "The Better Ball API",
+        "health": "/api/health",
+        "docs": "/docs",
+        "mcp": "/mcp/ (streamable HTTP; tools over the decision engine)",
+        "note": "Synthetic match between fictional clubs.",
+    }
+
+
 @app.get("/api/health")
 def health() -> dict:
     m = store.load()
