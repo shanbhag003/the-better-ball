@@ -8,9 +8,18 @@ Foundry agents, VS Code / GitHub Copilot agent mode, or the MCP Inspector.
 
 from __future__ import annotations
 
+import os
+
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from . import store
+
+# DNS-rebinding protection stays on: localhost plus any public host names we are served under
+# (e.g. the Container App's FQDN), so remote MCP clients such as VS Code can connect too.
+_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"] + [
+    h.strip() for h in os.environ.get("MCP_ALLOWED_HOSTS", "").split(",") if h.strip()
+]
 
 mcp = FastMCP(
     "betterball",
@@ -21,6 +30,12 @@ mcp = FastMCP(
     streamable_http_path="/",
     stateless_http=True,
     json_response=True,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_hosts,
+        allowed_origins=[f"https://{h}" for h in _hosts if "*" not in h]
+        + ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+    ),
 )
 
 for fn in store.TOOLS:

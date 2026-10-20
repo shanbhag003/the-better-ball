@@ -10,6 +10,9 @@ explanations: tactical detail for coaches and analysts, a simple story for fans,
 
 Built for the [Microsoft × Premier League "Inside the Game" Hackathon](https://github.com/microsoft/insidethegamehackathon).
 
+**▶ Live app:** https://witty-beach-054e1780f.5.azurestaticapps.net
+**API / MCP server:** https://ca-betterball-api.salmonglacier-773aff5b.eastus2.azurecontainerapps.io (`/api/health`, MCP at `/mcp/`)
+
 ---
 
 ## How it works
@@ -116,6 +119,23 @@ cd ../web && npm install && npm run dev
 Outputs:
 - `data/match_<seed>.json`: players, events (with freeze frames), and tracking at 5 fps
 - `data/analysis_<seed>.json`: every decision with its top options, verdict and cost, plus team and player summaries and key moments
+
+## Running on Azure
+
+| Microsoft service | Role in The Better Ball |
+|---|---|
+| **Microsoft Foundry** | Hosts the models (`gpt-4.1-mini` primary, `gpt-5-mini` backup) that power the agents |
+| **Microsoft Agent Framework** | Agents, tool calling over MCP, and the concurrent coach workflow |
+| **MCP server** | The decision engine as 7 tools, served by the API at `/mcp/` (usable from VS Code / GitHub Copilot too) |
+| **Azure Container Apps** | Runs the API, MCP server and agents (0.5 vCPU, 1–3 replicas, HTTPS ingress) |
+| **Managed identity** | The container app pulls from ACR and calls Foundry with its own identity: no keys anywhere |
+| **Azure Container Registry** | Stores the API image |
+| **Azure Static Web Apps** | Serves the React replay and match data |
+| **Application Insights + Log Analytics** | Request traces, agent and tool-call spans (Agent Framework OpenTelemetry), logs |
+| **GitHub Actions** | CI on pull requests; on `main`: tests → build and push the image → roll out the Container App → deploy the web app. Signs in to Azure with OIDC (no secrets that can leak) |
+
+Safety for a public demo: CORS locked to the web app, per-visitor and global rate limits on AI calls,
+capped tool calls per request, answer caching, and no prompt content in telemetry.
 
 ## Repository layout
 ```

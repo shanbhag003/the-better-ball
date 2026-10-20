@@ -15,6 +15,7 @@ Orchestrations
 from __future__ import annotations
 
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Any
@@ -23,6 +24,8 @@ from agent_framework import Agent, MCPStreamableHTTPTool, tool
 from agent_framework.orchestrations import ConcurrentBuilder
 
 from . import store
+
+log = logging.getLogger("betterball")
 
 VOICES = {
     "fan": (
@@ -100,7 +103,8 @@ async def match_tools():
     mcp_tool = MCPStreamableHTTPTool(name="betterball", url=url, description="The Better Ball match knowledge")
     try:
         await mcp_tool.connect()
-    except Exception:  # noqa: BLE001 - any connection problem means: use local tools
+    except Exception:  # noqa: BLE001 - any connection problem means: use local tools, but say so
+        log.warning("MCP server at %s unreachable; using in-process tools", url, exc_info=True)
         yield local_tools()
         return
     try:
