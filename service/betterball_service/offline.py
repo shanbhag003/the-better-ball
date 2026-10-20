@@ -11,8 +11,11 @@ from . import store
 def explain(moment_id: int, voice: str = "fan") -> str:
     f = store.get_moment(moment_id)
     played, better = f["played"], f["better_option"]
-    who = f["player"].split(" (")[0]
-    to = (played["to"] or "goal").split(" (")[0]
+    def name(who: str | None) -> str:  # "#7 Omar Everwood (right winger, ...)" -> "Omar Everwood"
+        return who.split(" (")[0].split(" ", 1)[1] if who else "goal"
+
+    who = name(f["player"])
+    to = name(played["to"])
     first = (
         f"{who} went for {'a shot' if played['action'] == 'shot' else 'a pass to ' + to} "
         f"({played['chance_it_arrives']} to come off, {played['goal_chance']} goal chance)."
@@ -70,15 +73,19 @@ def coach(team: str, as_of: float | None = None) -> str:
 def pundit(moment_id: int) -> dict:
     """Template breakdown used without a Foundry model."""
     f = store.get_moment(moment_id)
-    who = f["player"].split(" (")[0]
+
+    def name(who: str | None) -> str:  # "#7 Omar Everwood (right winger, ...)" -> "Omar Everwood"
+        return who.split(" (")[0].split(" ", 1)[1] if who else "goal"
+
+    who = name(f["player"])
     played, better = f["played"], f["better_option"]
-    to = (played["to"] or "goal").split(" (")[0]
+    to = name(played["to"])
     lines = [
-        f"{f['minute']} minutes in, {who} has the ball for {f['team']}.",
+        f"{f['minute']} minutes in, {who} has the ball for {f['team']}, {f['on_the_ball_at']}.",
         f"He goes to {to}: only {played['chance_it_arrives']} to arrive, {played['goal_chance']} goal chance.",
     ]
     if better:
-        bto = (better["to"] or "goal").split(" (")[0]
+        bto = name(better["to"])
         lines.append(f"The pass was on to {bto}: {better['goal_chance']} goal chance, {f['goal_chance_missed']} left behind.")
     return {
         "headline": f["verdict"].split(" (")[0].upper(),

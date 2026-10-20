@@ -29,6 +29,14 @@ def as_of(seconds: float | None):
         AS_OF.reset(token)
 
 GOOD_VERDICTS = {"optimal", "good"}
+# Position codes as a commentator would say them (the agents never see the codes).
+POSITION_NAMES = {
+    "GK": "goalkeeper", "RB": "right-back", "LB": "left-back", "RCB": "right centre-back",
+    "LCB": "left centre-back", "DM": "holding midfielder", "RDM": "holding midfielder",
+    "LDM": "holding midfielder", "RCM": "central midfielder", "LCM": "central midfielder",
+    "CAM": "number ten", "RAM": "right winger", "LAM": "left winger", "RW": "right winger",
+    "LW": "left winger", "ST": "centre-forward",
+}
 VERDICT_LABEL = {
     "optimal": "Best choice",
     "good": "Good choice",
@@ -152,7 +160,8 @@ class Match:
         if idx is None:
             return None
         p = self.players[idx]
-        return f"#{p['number']} {p['name']} ({p['position']}, {self.teams[p['team']]['short']})"
+        role = POSITION_NAMES.get(p["position"], p["position"])
+        return f"#{p['number']} {p['name']} ({role}, {self.teams[p['team']]['name']})"
 
     def score_at(self, t: float) -> list[int]:
         score = [0, 0]
@@ -190,6 +199,22 @@ class Match:
         row = frames[k]
         return [[row[4 + 2 * i] / 10, row[5 + 2 * i] / 10] for i in range(len(self.players))]
 
+    def zone(self, idx: int, t: float) -> str:
+        """Where a player is, in pundit terms ('right half-space, final third'), from his team's view."""
+        pos = self.positions_at(t)
+        team = self.players[idx]["team"]
+        keeper = next(i for i, p in enumerate(self.players) if p["team"] == team and p["position"] == "GK")
+        x, y = pos[idx]
+        if pos[keeper][0] > 52.5:  # attacking towards x = 0: flip into the attacking frame
+            x, y = 105 - x, 68 - y
+        # Facing the opponent's goal, the right touchline is y = 0.
+        lane = ("right wing" if y < 13.6 else "right half-space" if y < 27.2 else "centre"
+                if y < 40.8 else "left half-space" if y < 54.4 else "left wing")
+        if x > 88.5 and 13.85 < y < 54.15:
+            return "inside the box"
+        third = "own half" if x < 35 else "midfield" if x < 70 else "final third"
+        return f"{lane}, {third}"
+
     def moment_facts(self, eid: int) -> dict:
         d = self.decisions[eid]
         cut_out_by = self.interceptor(eid)
@@ -199,6 +224,7 @@ class Match:
             "minute": _minute(d["t"]),
             "score_at_the_time": self.score_at(d["t"]),
             "player": self.who(d["player"]),
+            "on_the_ball_at": self.zone(d["player"], d["t"]),
             "team": self.teams[d["team"]]["name"],
             "verdict": VERDICT_LABEL.get(d["verdict"], d["verdict"]),
             "played": {**self.option_facts(d["chosen"]), "result": d.get("outcome")},

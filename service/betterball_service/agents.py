@@ -370,11 +370,24 @@ def pundit(client, voice: str, language: str) -> Agent:
         name="Pundit",
         description="TV pundit who directs a telestration breakdown of one moment.",
         instructions=(
-            "You are a TV football pundit doing a telestration breakdown on a big Monday-night analysis show. "
-            f"Write in {language}, in spoken style, present tense, energetic but precise. "
-            "Line 1 sets the scene (who has the ball and where). Line 2 is the pass he played and why it fell short, "
-            "using the 'chance it arrives' or 'goal chance' numbers. Line 3 is what was on instead: the better option, "
-            "the space or defenders it beats, and the goal chance missed. Max 16 words per line, no hashtags, no emojis. "
+            "You are a former top-flight player turned studio pundit, doing a telestration breakdown on a big "
+            f"Monday-night football show. Speak {language} the way a pundit talks at the touchscreen: conversational, "
+            "opinionated, a bit passionate, present tense, talking the viewer through it ('Look at this...', "
+            "'Now watch...', 'He has to see that!'). Use real football language where it fits: half-space, between "
+            "the lines, in behind, the back four, line-breaking pass, on the half-turn, third man, switch of play, "
+            "overload, safe sideways ball, out of possession. Call players by surname and describe roles in words "
+            "(right-back, centre-forward) only when it adds something; never say position codes, team codes or shirt "
+            "numbers. Say numbers the way "
+            "people do ('nearly six in ten', 'fourteen percent'), at most two numbers per line. "
+            "Line 1 sets the scene: who has it and where ('on_the_ball_at'). Line 2 is the pass he played and why it "
+            "fell short. Line 3 is what was on instead: the better option, the space or defenders it takes out, and "
+            "the goal chance he left behind. 10 to 22 words per line, no hashtags, no emojis. "
+            "Example of the tone only (different players, never reuse its words):\n"
+            "HEADLINE: Took the easy one\n"
+            "1: Look at Marsh here, picking it up in the left half-space with time to turn. Lovely position.\n"
+            "2: And what does he do? Safe sideways ball to the full-back. Nine in ten it arrives, but it hurts nobody.\n"
+            "3: Now watch Kane-Ellis peel off the shoulder. That's in behind, two defenders gone, and he just doesn't see it!\n"
+            "SHOW: space, back_line\n"
             "Keep the numbers straight: 'goal_chance' is the chance an option leads to a goal; 'goal_chance_missed' is "
             "the difference between the better option and the pass played. "
             "SHOW lists the telestration layers to draw: 'space' when the better option goes into space or the "
@@ -385,6 +398,19 @@ def pundit(client, voice: str, language: str) -> Agent:
             f"SHOW: <comma-separated from space, back_line, beaten, offside, or none>\n{GROUNDING}"
         ),
     )
+
+
+_CODES = re.compile(r"\b(" + "|".join(sorted(store.POSITION_NAMES, key=len, reverse=True)) + r")\b")
+
+
+def _spoken(line: str) -> str:
+    """Safety net for the voice: no hashtags, shirt numbers, position or team codes ('RW' -> 'right winger')."""
+    line = re.sub(r"\s?#[A-Za-z]\w*", "", line)  # hashtags
+    line = re.sub(r"#\d+\s*", "", line)  # '#9 Dunford' -> 'Dunford'
+    line = _CODES.sub(lambda m: store.POSITION_NAMES[m.group(1)], line)
+    for short, name in ((t["short"], t["name"]) for t in store.load().teams):
+        line = re.sub(rf"\b{short}\b", name, line)
+    return re.sub(r"\s{2,}", " ", line).strip()
 
 
 _LINE = re.compile(r"^\s*(HEADLINE|1|2|3|SHOW)\s*[:.)-]\s*(.+?)\s*$", re.IGNORECASE)
@@ -400,9 +426,8 @@ def parse_script(text: str) -> PunditScript | None:
     lines = [fields[k] for k in ("1", "2", "3") if fields.get(k)]
     if "HEADLINE" not in fields or len(lines) < 2:
         return None
-    # Trim any run-on: keep the first sentence or two, at most ~24 words.
-    # Drop word hashtags (#MNF) but keep shirt numbers (#9 Dunford).
-    lines = [re.sub(r"\s#[A-Za-z]\w*", "", " ".join(re.split(r"\s+", ln)[:24])).strip() for ln in lines]
+    # Trim any run-on (at most ~28 words) and make every line sayable out loud.
+    lines = [_spoken(" ".join(re.split(r"\s+", ln)[:28])) for ln in lines]
     show = {k.strip().lower() for k in fields.get("SHOW", "").split(",")}
     return PunditScript(
         headline=" ".join(fields["HEADLINE"].split()[:6]).strip(" *#\"'"),
@@ -436,7 +461,7 @@ async def pundit_script(moment_id: int, voice: str = "fan", language: str = "Eng
     for _ in range(2):
         reply = await agent.run(
             "Break down this moment for the viewers.\nFacts:\n" + json.dumps(facts),
-            options={"max_tokens": 260, "temperature": 0.6},
+            options={"max_tokens": 320, "temperature": 0.75},
         )
         script = parse_script(_text(reply))
         if script is not None:
