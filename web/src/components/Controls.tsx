@@ -1,5 +1,5 @@
 import { Eye, EyeOff, Keyboard, Pause, Play, RotateCcw, RotateCw, Sparkles, Tv, Volume2, VolumeX } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { minute, VERDICT } from "../labels";
 import { seen, useLive } from "../live";
 import { usePlayback, type Playback } from "../playback";
@@ -55,6 +55,9 @@ export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAu
         <div className="tl-legend">
           <span><i className="lg moment" /> Key moment</span>
           <span><i className="lg goal" /> Goal</span>
+          <span className="has-tip up" data-tip="Per 5 min: solid = threat created, faded = threat that was on. The gap = missed chances.">
+            <i className="lg strip"><b className="made" /><b className="on" /></i> Threat created vs on
+          </span>
         </div>
         <div className="group toggles">
           <button className={`chip-toggle broadcast-toggle ${broadcast ? "on broadcast" : ""}`} onClick={() => setBroadcast(!broadcast)} aria-pressed={broadcast}>
@@ -82,6 +85,81 @@ export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAu
 }
 
 const TICKS = [0, 15, 30, 45, 60, 75, 90];
+const BINS = 18; // ~5 minutes each
+
+/**
+ * Missed-chance strip: per ~5 minutes, the threat each team created with its passes (solid)
+ * against the threat that was on with the better options (faded). The gap is what
+ * they left on the table. Home bars rise, away bars hang. Only what has been played counts.
+ */
+function MissedStrip({ match, asOf, moments, onMoment, onSeek, tipAt }: {
+  match: Match;
+  asOf: number | null;
+  moments: Decision[];
+  onMoment: (d: Decision) => void;
+  onSeek: (t: number) => void;
+  tipAt: (e: React.PointerEvent, text: string) => void;
+}) {
+  const { t0, duration } = match.meta;
+  const bins = useMemo(() => {
+    const out = Array.from({ length: BINS }, (_, i) => ({
+      a: t0 + (i * duration) / BINS,
+      b: t0 + ((i + 1) * duration) / BINS,
+      made: [0, 0],
+      left: [0, 0],
+      missed: [0, 0], // passes where a clearly better option was on
+      full: [0, 0], // whole match, so the scale doesn't jump as a live match fills in
+    }));
+    for (const d of match.decisions) {
+      const bin = out[Math.min(BINS - 1, Math.floor(((d.t - t0) / duration) * BINS))];
+      if (!bin) continue;
+      const made = Math.max(0, d.chosen.ev);
+      bin.full[d.team] += made + d.cost;
+      if (!seen(d.t, asOf)) continue;
+      bin.made[d.team] += made;
+      bin.left[d.team] += d.cost;
+      if (d.cost >= match.meta.good_threshold) bin.missed[d.team] += 1;
+    }
+    return out;
+  }, [match, asOf, t0, duration]);
+  const scale = Math.max(...bins.flatMap((b) => b.full)) || 1;
+  const [h, a] = match.teams;
+
+  return (
+    <div className="lane strip" aria-label="Missed-chance strip">
+      <span className="strip-mid" />
+      {bins.map((b, i) => {
+        const played = seen(b.a, asOf);
+        const text = `${minute(b.a)}–${minute(b.b - 1)} · Better options missed: ${h.short} ${b.missed[0]} · ${a.short} ${b.missed[1]}`;
+        const biggest = moments.filter((d) => d.t >= b.a && d.t < b.b).sort((x, y) => y.cost - x.cost)[0];
+        return (
+          <button
+            key={i}
+            className="strip-bin"
+            style={{ left: `${(i / BINS) * 100}%`, width: `${100 / BINS}%` }}
+            disabled={!played}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerMove={(e) => played && tipAt(e, text)}
+            onClick={() => (biggest ? onMoment(biggest) : onSeek(b.a))}
+            aria-label={played ? text : `${minute(b.a)}: not played yet`}
+          >
+            {[0, 1].map((k) => {
+              const on = ((b.made[k] + b.left[k]) / scale) * 100;
+              const made = (b.made[k] / scale) * 100;
+              const color = match.teams[k].color;
+              return (
+                <span key={k} className={`strip-side ${k ? "away" : "home"}`}>
+                  <i className="on" style={{ height: `${on}%`, background: color }} />
+                  <i className="made" style={{ height: `${made}%`, background: color }} />
+                </span>
+              );
+            })}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function Timeline({ match, pb, moments, onMoment }: { match: Match; pb: Playback; moments: Decision[]; onMoment: (d: Decision) => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -111,7 +189,7 @@ function Timeline({ match, pb, moments, onMoment }: { match: Match; pb: Playback
         pb.seek(timeAt(e.clientX));
       }}
       onPointerMove={(e) => {
-        if (!(e.target as HTMLElement).closest(".marker")) tipAt(e, minute(timeAt(e.clientX)));
+        if (!(e.target as HTMLElement).closest(".marker, .strip-bin")) tipAt(e, minute(timeAt(e.clientX)));
         if (dragging.current) pb.seek(timeAt(e.clientX));
       }}
       onPointerUp={() => (dragging.current = false)}
@@ -122,6 +200,8 @@ function Timeline({ match, pb, moments, onMoment }: { match: Match; pb: Playback
       aria-valuemax={t0 + duration}
       aria-valuenow={Math.round(pb.t)}
     >
+      <MissedStrip match={match} asOf={asOf} moments={moments} onMoment={onMoment} onSeek={(t) => pb.seek(t)} tipAt={tipAt} />
+
       {/* Goals ride above the track. */}
       <div className="lane goals">
         {match.goals.filter((g) => seen(g.t, asOf)).map((g) => (
