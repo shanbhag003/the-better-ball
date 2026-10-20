@@ -25,32 +25,39 @@ export function DecisionCard({ match, d, onReplay, onNext, nextLabel, onFinish, 
         <span className="dc-hint muted">{explain(d)}</span>
         <button className="icon-btn sm" onClick={onClose} aria-label="Close"><X size={16} /></button>
       </div>
-      <div className="dc-who">
-        <span className="num" style={{ background: match.teams[p.team].color }}>{p.number}</span>
-        <div>
-          <b>{p.name}</b>
-          <div className="muted small">{p.position} · {match.teams[p.team].short}</div>
+      {/* Two columns on wide screens (the facts | the AI and actions), one column otherwise. */}
+      <div className="dc-body">
+        <div className="dc-main">
+          <div className="dc-who">
+            <span className="num" style={{ background: match.teams[p.team].color }}>{p.number}</span>
+            <div>
+              <b>{p.name}</b>
+              <div className="muted small">{p.position} · {match.teams[p.team].short}</div>
+            </div>
+          </div>
+
+          <div className={`dc-compare ${missed ? "" : "single"}`}>
+            <OptionBox match={match} label="Played" o={d.chosen} outcome={d.outcome} tone="played" />
+            {missed && <OptionBox match={match} label="Better" o={d.best} tone="better" />}
+          </div>
         </div>
-      </div>
 
-      <div className={`dc-compare ${missed ? "" : "single"}`}>
-        <OptionBox match={match} label="Played" o={d.chosen} outcome={d.outcome} tone="played" />
-        {missed && <OptionBox match={match} label="Better" o={d.best} tone="better" />}
-      </div>
+        <div className="dc-side">
+          {missed && (
+            <div className="dc-cost">
+              <span className="big">+{goalPct(d.cost)}</span>
+              <span className="muted">goal chance missed</span>
+            </div>
+          )}
 
-      {missed && (
-        <div className="dc-cost">
-          <span className="big">+{goalPct(d.cost)}</span>
-          <span className="muted">goal chance missed</span>
+          <ExplainBox key={d.id} momentId={d.id} />
+
+          <div className="dc-actions">
+            <button className="btn ghost" onClick={onReplay}><RotateCcw size={15} /> Replay</button>
+            {onNext && <button className="btn primary" onClick={onNext}>{nextLabel} <ChevronRight size={16} /></button>}
+            {!onNext && onFinish && <button className="btn primary" onClick={onFinish}><Check size={16} /> Finish tour</button>}
+          </div>
         </div>
-      )}
-
-      <ExplainBox key={d.id} momentId={d.id} />
-
-      <div className="dc-actions">
-        <button className="btn ghost" onClick={onReplay}><RotateCcw size={15} /> Replay</button>
-        {onNext && <button className="btn primary" onClick={onNext}>{nextLabel} <ChevronRight size={16} /></button>}
-        {!onNext && onFinish && <button className="btn primary" onClick={onFinish}><Check size={16} /> Finish tour</button>}
       </div>
     </div>
   );

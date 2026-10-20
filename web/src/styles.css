@@ -532,7 +532,11 @@ select.lang option { background: var(--purple-deep); }
 
 /* ---------- broadcast view (MNF-style breakdowns) ---------- */
 .chip-toggle.on.broadcast { color: var(--cyan); border-color: rgba(4,245,255,0.45); background: rgba(4,245,255,0.08); }
-.pitch-card.mnf .decision { bottom: auto; top: 56px; max-height: calc(100% - 150px); }
+.pitch-card.mnf .decision { max-height: calc(100% - 66px); }
+/* The card replaces the lower-third while it is open (it has Replay and Next too). */
+.pitch-card:has(.decision) .lower-third { display: none; }
+/* The card's "Next · 2/15" shows tour progress, so the tour bar steps aside. */
+.pitch-card:has(.decision) .tour-banner { display: none; }
 .lower-third {
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 3;
   width: min(860px, calc(100% - 28px)); animation: lt-in 0.45s cubic-bezier(.2,.9,.25,1);
@@ -566,7 +570,6 @@ select.lang option { background: var(--purple-deep); }
 .lt-replay:hover { color: var(--text); background: var(--surface-2); }
 @media (max-width: 720px) {
   .lt-num { width: 40px; font-size: 18px; }
-  .pitch-card.mnf .decision { top: auto; }
 }
 
 .lt-actions { display: flex; align-items: center; flex: none; border-left: 1px solid rgba(255,255,255,0.1); }
@@ -641,8 +644,6 @@ select.lang option { background: var(--purple-deep); }
   .tb-bar { display: none; }
 }
 @media (max-width: 720px) {
-  /* Details replace the lower-third on phones (both would sit under the pitch). */
-  .pitch-card:has(.decision) .lower-third { display: none; }
   /* Tour banner gets its own row above the pitch instead of covering the legend. */
   .pitch-legend { order: -2; }
   .tour-banner { order: -1; position: static; align-self: flex-start; margin: 0 0 6px; }
@@ -663,3 +664,21 @@ select.lang option { background: var(--purple-deep); }
   color: var(--purple); background: var(--cyan);
 }
 .pc-pause:hover { background: #fff; }
+
+/* ---------- decision card: compact so it fits over the pitch without scrolling ---------- */
+.decision { padding: 12px 14px; }
+.decision .dc-who { margin: 7px 0; }
+.decision .opt { padding: 8px 11px; gap: 4px; }
+.decision .dc-cost { margin: 7px 2px 0; }
+.decision .dc-cost .big { font-size: 21px; }
+.decision .dc-actions { margin-top: 6px; }
+.decision .explain-box { margin-top: 8px; padding: 8px; gap: 6px; }
+/* Laptop and up: a wide two-column card, short enough to sit over the pitch without scrolling. */
+@media (min-width: 1101px) {
+  .decision { width: min(780px, calc(100% - 44px)); }
+  .dc-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: 14px; align-items: start; }
+  .dc-side { display: flex; flex-direction: column; }
+  .decision .dc-side .dc-cost { margin-top: 0; }
+  .decision .dc-side .explain-box { margin-top: 6px; }
+  .decision .dc-side .dc-actions { margin-top: 8px; }
+}

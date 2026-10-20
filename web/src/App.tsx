@@ -190,7 +190,13 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [pb, nextMoment, goTo]);
 
-  // In broadcast mode the lower-third is the graphic; the full card opens on request.
+  // In broadcast mode the lower-third shows first; the full card follows on its own so it isn't missed.
+  useEffect(() => {
+    if (!broadcast || !breakdownDone) return;
+    const id = window.setTimeout(() => setDetailsOpen(true), 2500);
+    return () => window.clearTimeout(id);
+  }, [broadcast, breakdownDone, selected?.id]);
+
   const showCard = selected && !pb.playing && Math.abs(pb.t - selected.t) < 0.3 && (!broadcast || (breakdownDone && detailsOpen));
 
   const live = useMemo(
