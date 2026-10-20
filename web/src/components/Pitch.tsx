@@ -1,5 +1,5 @@
 import { ChevronRight, Maximize2, Mic, Minus, PanelRightOpen, Plus, RotateCcw, Tv } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { follow, L, projector, W, type Cam, type Geom, type Proj } from "../camera";
 import { recentDecisions, snapshot } from "../data";
 import type { PunditScript, Voice } from "../api";
@@ -97,6 +97,18 @@ interface Hover {
 
 export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown, onDetails, onNext, pundit }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Height of the caption / lower-third: on phones they sit under the pitch and need room.
+  const [overlayH, setOverlayH] = useState(0);
+  const overlayObs = useRef<ResizeObserver | null>(null);
+  const overlayEl = useRef<HTMLDivElement | null>(null);
+  const overlayRef = useCallback((el: HTMLDivElement | null) => {
+    overlayObs.current?.disconnect();
+    overlayEl.current = el;
+    if (!el) return setOverlayH(0);
+    setOverlayH(el.offsetHeight);
+    overlayObs.current = new ResizeObserver(() => setOverlayH(el.offsetHeight));
+    overlayObs.current.observe(el);
+  }, []);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const propsRef = useRef({ selected, showBetter, broadcast, onBreakdown, pundit });
   propsRef.current = { selected, showBetter, broadcast, onBreakdown, pundit };
@@ -113,6 +125,10 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
   const [headline, setHeadline] = useState<string | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [lowerThird, setLowerThird] = useState<Decision | null>(null);
+  // Re-measure when the caption text or the lower-third changes.
+  useLayoutEffect(() => {
+    if (overlayEl.current) setOverlayH(overlayEl.current.offsetHeight);
+  }, [caption, headline, lowerThird]);
 
   // Size the canvas to its container.
   useEffect(() => {
@@ -599,7 +615,11 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
 
   const hp = hover ? match.players[hover.player] : null;
   return (
-    <div className="pitch-wrap" ref={wrapRef}>
+    <div
+      className={`pitch-wrap ${overlayH ? "has-overlay" : ""}`}
+      ref={wrapRef}
+      style={{ "--overlay-h": `${overlayH}px` } as React.CSSProperties}
+    >
       <canvas
         ref={canvasRef}
         className={drag.current ? "dragging" : ""}
@@ -624,20 +644,21 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         </div>
       )}
       {broadcast && caption && !lowerThird && (
-        <div className={`pundit-caption ${caption.waiting ? "waiting" : ""}`} aria-live="polite">
+        <div ref={overlayRef} className={`pundit-caption ${caption.waiting ? "waiting" : ""}`} aria-live="polite">
           <span className="pc-badge"><Mic size={12} /> AI PUNDIT</span>
           <span className="pc-text">{caption.text}</span>
         </div>
       )}
       {broadcast && lowerThird && (
-        <LowerThird match={match} d={lowerThird} headline={headline} onReplay={replay} onDetails={onDetails} onNext={onNext ?? null} />
+        <LowerThird boxRef={overlayRef} match={match} d={lowerThird} headline={headline} onReplay={replay} onDetails={onDetails} onNext={onNext ?? null} />
       )}
     </div>
   );
 }
 
 /** Broadcast lower-third graphic summarising the breakdown. */
-function LowerThird({ match, d, headline, onReplay, onDetails, onNext }: {
+function LowerThird({ boxRef, match, d, headline, onReplay, onDetails, onNext }: {
+  boxRef: (el: HTMLDivElement | null) => void;
   match: Match;
   d: Decision;
   headline: string | null;
@@ -651,7 +672,7 @@ function LowerThird({ match, d, headline, onReplay, onDetails, onNext }: {
   const missed = d.cost >= match.meta.good_threshold;
   const who = (i: number | null) => (i === null ? "Shot" : `#${match.players[i].number} ${match.players[i].name.split(" ")[1]}`);
   return (
-    <div className="lower-third" role="status">
+    <div ref={boxRef} className="lower-third" role="status">
       <div className="lt-brand"><Tv size={13} /> BETTER BALL ANALYSIS{headline ? " · AI PUNDIT" : ""}</div>
       <div className="lt-main">
         <span className="lt-bar" style={{ background: team.color }} />

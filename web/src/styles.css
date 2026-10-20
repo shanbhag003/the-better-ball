@@ -171,11 +171,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 .verdict.warn { background: rgba(255,185,0,0.15); color: var(--warn); }
 .verdict.bad { background: rgba(233,0,82,0.2); color: #ff4d8d; }
 .verdict.info { background: rgba(4,245,255,0.13); color: var(--cyan); }
-.dc-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dc-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .dc-compare.single { grid-template-columns: 1fr; }
 .opt { padding: 11px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); display: grid; gap: 6px; align-content: start; }
 .opt.better { background: rgba(0,255,133,0.07); border-color: rgba(0,255,133,0.38); }
-.opt-label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.opt-label { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .opt-label .line { width: 18px; }
 .outcome { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--surface-2); }
 .outcome.intercepted, .outcome.out, .outcome.offside, .outcome.saved, .outcome.off_target, .outcome.blocked { color: #ff4d8d; }
@@ -399,7 +399,8 @@ button:disabled { opacity: 0.5; cursor: default; }
   .scoreboard .score { font-size: 20px; }
   .pitch-card { padding: 8px; }
   .pitch-legend .muted { display: none; }
-  .toggles { margin-left: 0; }
+  .toggles { margin-left: 0; flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .toggles .chip-toggle { justify-content: center; min-width: 0; width: 100%; }
   .keys { display: none; }
   .big-play .circle { width: 60px; height: 60px; }
 }
@@ -639,3 +640,42 @@ select.lang option { background: var(--purple-deep); }
 .lg.strip b { display: block; width: 4px; border-radius: 1px; background: var(--muted); }
 .lg.strip b.on { height: 10px; opacity: 0.35; }
 .lg.strip b.made { height: 5px; }
+
+/* ---------- phones: broadcast graphics sit under the pitch, not on it ---------- */
+@media (max-width: 720px) {
+  .pitch-wrap.has-overlay { margin-bottom: calc(var(--overlay-h) + 10px); }
+  .lower-third, .pundit-caption {
+    top: calc(100% + 10px); bottom: auto; left: 0; transform: none; width: 100%; max-width: none;
+  }
+  @keyframes lt-in { from { opacity: 0; transform: translateY(12px); } }
+  .pundit-caption { align-items: flex-start; padding: 9px 12px; }
+  .pundit-caption .pc-text { font-size: 13.5px; }
+  .lt-main { flex-wrap: wrap; }
+  .lt-text { padding: 8px 10px; }
+  .lt-title { flex-wrap: wrap; row-gap: 3px; white-space: normal; font-size: 14px; }
+  .lt-who { display: none; }
+  .lt-stat { padding: 0 12px; }
+  .lt-big { font-size: 20px; }
+  .lt-actions { flex-basis: 100%; border-left: 0; border-top: 1px solid rgba(255,255,255,0.1); }
+  .lt-actions button { flex: 1; justify-content: center; height: 38px; }
+  .tour-banner { top: 40px; left: 16px; transform: none; padding: 4px 6px 4px 12px; gap: 8px; }
+  .tb-bar { display: none; }
+}
+@media (max-width: 720px) {
+  /* Details replace the lower-third on phones (both would sit under the pitch). */
+  .pitch-card:has(.decision) .lower-third { display: none; }
+  /* Tour banner gets its own row above the pitch instead of covering the legend. */
+  .pitch-legend { order: -2; }
+  .tour-banner { order: -1; position: static; align-self: flex-start; margin: 0 0 6px; }
+  .opt { padding: 10px; }
+  .metric { font-size: 12px; }
+}
+@media (max-width: 720px) {
+  /* Header: compact "AI" badge so the score and help button keep their room. */
+  .head-right { gap: 6px; }
+  .head-right .ai-badge { font-size: 0; gap: 0; padding: 5px 7px; }
+  .head-right .ai-badge::after { content: "AI"; font-size: 11px; margin-left: 4px; }
+  .head-right .ai-badge.off::after { content: "AI off"; margin-left: 0; }
+  .scoreboard .score { white-space: nowrap; }
+  .toggles .chip-toggle { padding: 0 8px; gap: 5px; font-size: 11.5px; white-space: nowrap; }
+}
