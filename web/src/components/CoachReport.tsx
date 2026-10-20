@@ -53,7 +53,7 @@ export function CoachPanel({ match }: { match: Match }) {
       <div className="crew">
         <span className="crew-step">Attack coach</span>
         <span className="crew-plus">+</span>
-        <span className="crew-step">Security coach</span>
+        <span className="crew-step">Possession coach</span>
         <span className="crew-arrow">→</span>
         <span className="crew-step lead">Head coach</span>
       </div>

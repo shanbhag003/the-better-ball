@@ -3,7 +3,7 @@
 Agents
   * Analyst  - answers questions about the match. Has the MCP tools; must ground every claim in them.
   * Narrator - turns facts into short, plain language for a chosen audience (fan / analyst) and language.
-  * Attack coach and Ball-security coach - specialists that review one team in parallel.
+  * Attack coach and Possession coach - specialists that review one team in parallel.
   * Head coach - merges the specialists' notes into one half-time / full-time report.
   * Pundit   - directs the broadcast breakdown of a key moment: headline, three spoken beats, and
                which telestration layers to show (space, back line, beaten defenders, offside).
@@ -12,7 +12,7 @@ Orchestrations
   * explain(moment)  : Narrator alone, fed the moment's facts (fast, cheap, deterministic grounding).
   * ask(question)    : Analyst (MCP tools) -> Narrator, explicit hand-off of written findings; the Narrator
                        returns structured output (answer, card references, 3 follow-ups).
-  * coach(team)      : Concurrent  [Attack coach, Ball-security coach] -> Head coach.
+  * coach(team)      : Concurrent  [Attack coach, Possession coach] -> Head coach.
 
 Live mode: `as_of` (match seconds) limits every tool to what has happened so far, and the prompts forbid
 revealing or predicting the result.
@@ -336,12 +336,12 @@ async def coach(team: str, voice: str = "analyst", language: str = "English", cl
         scope = "so far in this match" if m.live() else "in this match"
         async with match_tools(as_of) as tools:
             attack = specialist(client, tools, team_name, "Attacking (chance creation, forward passing)", "AttackCoach")
-            security = specialist(client, tools, team_name, "Ball security (risky passes, offside, turnovers)", "SecurityCoach")
+            possession = specialist(client, tools, team_name, "Possession (keeping the ball: risky passes, offside, turnovers)", "PossessionCoach")
 
             def collect(results: list) -> str:
                 return "\n\n".join(f"Notes from {getattr(r, 'executor_id', 'specialist')}:\n{_text(r)}" for r in results)
 
-            notes_flow = ConcurrentBuilder(participants=[attack, security]).with_aggregator(collect).build()
+            notes_flow = ConcurrentBuilder(participants=[attack, possession]).with_aggregator(collect).build()
             notes = _last_text((await notes_flow.run(f"{rules}\n\nReview {team_name}'s decisions {scope}.")).get_outputs())
         report = await head_coach(client, team_name, voice, language).run(
             f"{rules}\n\nSpecialist notes for {team_name}:\n{notes}\n\nWrite the report covering only what has happened {scope}."

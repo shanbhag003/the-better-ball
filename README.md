@@ -90,7 +90,7 @@ A React app that replays the match on an animated 2D pitch:
 | **Analyst → Narrator** (sequential workflow) | **Ask AI** tab: the Analyst calls the MCP tools to gather evidence, then the Narrator answers for the chosen audience. |
 | **AI Pundit** | Directs each Broadcast-view breakdown: writes a headline and three spoken beats, and **chooses which telestration layers to draw** (space, back line, beaten defenders, offside). The animation is timed to its voice. |
 | **Azure AI Speech** | Reads the Pundit's lines aloud with neural voices in 8 languages (keyless, via the app's managed identity). |
-| **Attack coach ‖ Ball-security coach → Head coach** (concurrent workflow) | **AI coach report**: two specialists review the team in parallel; the head coach merges their notes into *What worked / Fix next / Player spotlight*. |
+| **Attack coach ‖ Possession coach → Head coach** (concurrent workflow) | **AI coach report**: two specialists review the team in parallel; the head coach merges their notes into *What worked / Fix next / Player spotlight*. |
 
 **Grounding:** agents may only use numbers returned by the tools; the prompts forbid inventing players, minutes or stats.
 **Resilience:** if the primary deployment (gpt-4.1-mini) fails or is rate-limited, the API retries on a backup deployment (gpt-5-mini) and the UI badge says so. Tool calls are capped (12 calls, 90 s) so an agent can't loop.
