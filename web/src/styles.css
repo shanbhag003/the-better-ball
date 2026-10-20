@@ -440,7 +440,7 @@ select.lang option { background: var(--purple-deep); }
 
 .decision { max-height: calc(100% - 44px); overflow-y: auto; }
 .explain-box { margin-top: 10px; padding: 10px; border-radius: 12px; background: rgba(4,245,255,0.05); border: 1px solid rgba(4,245,255,0.18); display: grid; gap: 8px; }
-.eb-row { display: flex; align-items: center; gap: 8px; }
+.eb-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
 .eb-row .btn.ai { margin-left: auto; }
 .eb-text { display: grid; gap: 6px; font-size: 13px; line-height: 1.45; }
 .eb-text.error, .bubble.error { color: #ff4d8d; }
@@ -676,7 +676,7 @@ select.lang option { background: var(--purple-deep); }
 /* Laptop and up: a wide two-column card, short enough to sit over the pitch without scrolling. */
 @media (min-width: 1101px) {
   .decision { width: min(780px, calc(100% - 44px)); }
-  .dc-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: 14px; align-items: start; }
+  .dc-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 330px); gap: 14px; align-items: start; }
   .dc-side { display: flex; flex-direction: column; }
   .decision .dc-side .dc-cost { margin-top: 0; }
   .decision .dc-side .explain-box { margin-top: 6px; }
