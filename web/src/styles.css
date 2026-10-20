@@ -579,3 +579,16 @@ select.lang option { background: var(--purple-deep); }
 .mp-label { font-weight: 800; paint-order: stroke; stroke: rgba(10,0,14,0.85); stroke-width: 0.6px; }
 .ac-caption { color: #e6d9ea; line-height: 1.4; }
 .tag.focus { margin-left: 6px; color: #ff4d8d; background: rgba(233,0,82,0.14); }
+
+/* ---------- pitch zoom / pan ---------- */
+.pitch-wrap canvas { cursor: grab; }
+.pitch-wrap canvas.dragging, .pitch-wrap canvas:active { cursor: grabbing; }
+.pitch-zoom {
+  position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; align-items: center; gap: 2px;
+  padding: 3px; border-radius: 10px; background: rgba(26,0,32,0.82); border: 1px solid var(--border); backdrop-filter: blur(6px);
+}
+.pitch-zoom button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--muted); }
+.pitch-zoom button:hover { color: var(--text); background: var(--surface-2); }
+.pitch-zoom button.on { color: var(--cyan); }
+.pz-hint { font-size: 10.5px; color: var(--muted); padding: 0 8px 0 4px; white-space: nowrap; }
+@media (max-width: 720px) { .pz-hint { display: none; } }

@@ -1,4 +1,4 @@
-import { ChevronRight, PanelRightOpen, RotateCcw, Tv } from "lucide-react";
+import { ChevronRight, Maximize2, Minus, PanelRightOpen, Plus, RotateCcw, Tv } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { follow, L, projector, W, type Cam, type Geom, type Proj } from "../camera";
 import { recentDecisions, snapshot } from "../data";
@@ -55,6 +55,10 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
   const geom = useRef<Geom>({ s: 1, ox: 0, oy: 0, w: 0, h: 0 });
   const cam = useRef<Cam>({ mode: 0, fx: L / 2, fy: W / 2, zoom: 1 });
   const projRef = useRef<Proj | null>(null);
+  // The viewer's own zoom and pan, applied on top of the automatic camera.
+  const view = useRef({ k: 1, px: 0, py: 0 });
+  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const [zoomed, setZoomed] = useState(false);
   const posRef = useRef<[number, number][]>([]);
   const tele = useRef<{ id: number | null; start: number; done: boolean }>({ id: null, start: 0, done: false });
   const [hover, setHover] = useState<Hover | null>(null);
@@ -129,24 +133,31 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         onBreakdown?.(true);
       }
 
-      // ---- camera
+      const better = (d: Decision) => showBetter && d.cost >= match.meta.good_threshold && !!d.best;
+      const list: { d: Decision; alpha: number; sticky: boolean }[] = sticky
+        ? [{ d: sticky, alpha: 1, sticky: true }]
+        : holdOverlays(recentDecisions(match, t, HOLD * pb.speed), t, pb.speed);
+
+      // ---- camera: frame everything that is on screen (passes, lofted arcs, the ball)
       const target: Cam = { mode: 0, fx: L / 2, fy: W / 2, zoom: 1 };
       if (broadcast) {
         target.mode = 1;
-        if (breakdown) {
-          const pts = [breakdown.start, breakdown.chosen.target, breakdown.best.target];
-          target.fx = pts.reduce((a, p) => a + p[0], 0) / 3;
-          target.fy = pts.reduce((a, p) => a + p[1], 0) / 3 - 1;
-          const spread = Math.max(...pts.map((p) => Math.hypot(p[0] - target.fx, p[1] - target.fy)));
-          target.zoom = Math.max(0.74, Math.min(1.05, 24 / Math.max(14, spread)));
-        } else {
-          target.fx = snap.ball[0];
-          target.fy = snap.ball[1] - 4;
-          target.zoom = 0.82;
+        const pts: Pt3[] = [[snap.ball[0], snap.ball[1], 0]];
+        for (const { d } of list) {
+          pts.push(...passPoints(d.start, d.chosen.target, d.chosen.lofted));
+          if (better(d)) pts.push(...passPoints(d.start, d.best.target, d.best.lofted));
         }
+        if (breakdown) pts.splice(0, 1); // the story, not the ball, sets the frame
+        const xs = pts.map((q) => q[0]);
+        const ys = pts.map((q) => q[1]);
+        target.fx = (Math.min(...xs) + Math.max(...xs)) / 2;
+        target.fy = (Math.min(...ys) + Math.max(...ys)) / 2 - (breakdown ? 1 : 3);
+        // Leave room for name tags above and the lower-third below during a breakdown.
+        const pad = breakdown ? { t: 0.15, b: 0.26, l: 0.06, r: 0.06 } : { t: 0.08, b: 0.08, l: 0.05, r: 0.05 };
+        target.zoom = fitZoom(g, target, pts, pad, 0.4, breakdown ? 1.05 : 0.82);
       }
       follow(cam.current, target, dt, breakdown ? 0.3 : 0.6);
-      const proj = projector(g, cam.current);
+      const proj = withView(projector(g, cam.current), g, view.current);
       projRef.current = proj;
       const { P } = proj;
 
@@ -164,7 +175,6 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
 
       const pulse = 0.5 + 0.5 * Math.sin(now / 220);
       const rings = new Map<number, { color: string; alpha: number }>();
-      const better = (d: Decision) => showBetter && d.cost >= match.meta.good_threshold && !!d.best;
 
       // ---- breakdown layers under the players: space, back line, offside line, spotlights
       if (breakdown) {
@@ -186,9 +196,6 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
       }
 
       // ---- pass overlays
-      const list: { d: Decision; alpha: number; sticky: boolean }[] = sticky
-        ? [{ d: sticky, alpha: 1, sticky: true }]
-        : holdOverlays(recentDecisions(match, t, HOLD * pb.speed), t, pb.speed);
       const labelled = list.length ? list[list.length - 1].d : null;
       for (const { d, alpha, sticky: isSticky } of list) {
         const from = d.start;
@@ -345,7 +352,65 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
     setLowerThird(null);
   };
 
+  const setView = (k: number, px: number, py: number) => {
+    const { w, h } = geom.current;
+    k = Math.max(0.6, Math.min(4, k));
+    // Keep some of the pitch on screen whatever the pan.
+    const lx = (w * Math.max(k, 1)) / 2;
+    const ly = (h * Math.max(k, 1)) / 2;
+    view.current = { k, px: Math.max(-lx, Math.min(lx, px)), py: Math.max(-ly, Math.min(ly, py)) };
+    setZoomed(Math.abs(k - 1) > 0.01 || Math.abs(px) > 1 || Math.abs(py) > 1);
+  };
+
+  /** Zoom by `f` keeping the screen point (mx, my) fixed. */
+  const zoomAt = (f: number, mx?: number, my?: number) => {
+    const { w, h } = geom.current;
+    const { k, px, py } = view.current;
+    const cx = w / 2;
+    const cy = h / 2;
+    mx ??= cx;
+    my ??= cy;
+    const k2 = Math.max(0.6, Math.min(4, k * f));
+    const sx = cx + (mx - cx - px) / k;
+    const sy = cy + (my - cy - py) / k;
+    setView(k2, mx - cx - (sx - cx) * k2, my - cy - (sy - cy) * k2);
+  };
+  const resetView = () => setView(1, 0, 0);
+
+  // Wheel zoom needs a non-passive listener so the page does not scroll.
+  useEffect(() => {
+    const canvas = canvasRef.current!;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = canvas.getBoundingClientRect();
+      zoomAt(Math.pow(1.0018, -e.deltaY), e.clientX - r.left, e.clientY - r.top);
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    drag.current = { x: e.clientX, y: e.clientY, moved: false };
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onUp = () => {
+    drag.current = null;
+  };
+
   const onMove = (e: React.PointerEvent) => {
+    if (drag.current) {
+      const dx = e.clientX - drag.current.x;
+      const dy = e.clientY - drag.current.y;
+      if (Math.abs(dx) + Math.abs(dy) > 2) drag.current.moved = true;
+      drag.current.x = e.clientX;
+      drag.current.y = e.clientY;
+      const v = view.current;
+      setView(v.k, v.px + dx, v.py + dy);
+      setHover(null);
+      return;
+    }
     const proj = projRef.current;
     if (!proj) return;
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -368,7 +433,22 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
   const hp = hover ? match.players[hover.player] : null;
   return (
     <div className="pitch-wrap" ref={wrapRef}>
-      <canvas ref={canvasRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)} />
+      <canvas
+        ref={canvasRef}
+        className={drag.current ? "dragging" : ""}
+        onPointerDown={onDown}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onPointerMove={onMove}
+        onPointerLeave={() => setHover(null)}
+        onDoubleClick={resetView}
+      />
+      <div className="pitch-zoom" role="group" aria-label="Pitch zoom">
+        <button onClick={() => zoomAt(1.25)} title="Zoom in" aria-label="Zoom in"><Plus size={15} /></button>
+        <button onClick={() => zoomAt(1 / 1.25)} title="Zoom out" aria-label="Zoom out"><Minus size={15} /></button>
+        <button onClick={resetView} className={zoomed ? "on" : ""} title="Fit (double-click the pitch)" aria-label="Fit to view"><Maximize2 size={14} /></button>
+        <span className="pz-hint">Scroll to zoom · drag to move</span>
+      </div>
       {hp && hover && (
         <div className="tip" style={{ left: hover.x, top: hover.y - 14 }}>
           <span className="dot" style={{ background: match.teams[hp.team].color }} />
@@ -449,6 +529,53 @@ function holdOverlays(list: Decision[], t: number, speed: number) {
 
 type PFn = Proj["P"];
 type Pt = [number, number];
+type Pt3 = [number, number, number];
+
+/** Points a pass occupies on screen: both ends and, for lofted balls, the top of the arc. */
+function passPoints(from: Pt, to: Pt, lofted?: boolean): Pt3[] {
+  const pts: Pt3[] = [[from[0], from[1], 0], [to[0], to[1], 0]];
+  if (lofted) {
+    const len = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    pts.push([(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, Math.min(12, len / 4)]);
+  }
+  return pts;
+}
+
+/** Largest broadcast zoom (up to zMax) at which every point stays inside the padded frame. */
+function fitZoom(g: Geom, cam: Cam, pts: Pt3[], pad: { t: number; b: number; l: number; r: number }, zMin: number, zMax: number) {
+  const inside = (zoom: number) => {
+    const pr = projector(g, { ...cam, zoom, mode: 1 });
+    return pts.every(([x, y, z]) => {
+      const [sx, sy] = pr.P(x, y, z);
+      return sx >= g.w * pad.l && sx <= g.w * (1 - pad.r) && sy >= g.h * pad.t && sy <= g.h * (1 - pad.b);
+    });
+  };
+  if (inside(zMax)) return zMax;
+  if (!inside(zMin)) return zMin;
+  let lo = zMin;
+  let hi = zMax;
+  for (let k = 0; k < 10; k++) {
+    const mid = (lo + hi) / 2;
+    if (inside(mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** Apply the viewer's zoom and pan (screen space) on top of the camera projection. */
+function withView(proj: Proj, g: Geom, v: { k: number; px: number; py: number }): Proj {
+  if (v.k === 1 && v.px === 0 && v.py === 0) return proj;
+  const cx = g.w / 2;
+  const cy = g.h / 2;
+  return {
+    mode: proj.mode,
+    P: (x, y, z) => {
+      const [sx, sy] = proj.P(x, y, z);
+      return [cx + (sx - cx) * v.k + v.px, cy + (sy - cy) * v.k + v.py];
+    },
+    scale: (x, y) => proj.scale(x, y) * v.k,
+  };
+}
 
 function path(ctx: CanvasRenderingContext2D, P: PFn, pts: Pt[], close = false) {
   ctx.beginPath();
