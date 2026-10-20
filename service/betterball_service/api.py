@@ -11,7 +11,7 @@ import os
 import time
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -33,6 +33,9 @@ _load_env_file(Path(__file__).resolve().parents[1] / ".env")
 
 from . import agents, offline, store  # noqa: E402
 from .mcp_server import mcp  # noqa: E402
+from .telemetry import limiter, setup_telemetry  # noqa: E402
+
+setup_telemetry()
 
 log = logging.getLogger("betterball")
 
@@ -83,6 +86,10 @@ async def _online(online, meta: dict) -> str:
         return await online(agents.make_client(backup))
 
 
+def rate_limited(request: Request) -> None:
+    limiter.check(request)
+
+
 async def _run(key: tuple, online, fallback) -> dict:
     if key in _cache:
         return {**_cache[key], "cached": True}
@@ -124,7 +131,7 @@ def health() -> dict:
     return {"ok": True, **_mode(), "match": [t["name"] for t in m.teams], "decisions": len(m.decisions)}
 
 
-@app.post("/api/explain")
+@app.post("/api/explain", dependencies=[Depends(rate_limited)])
 async def explain(body: ExplainIn) -> dict:
     lang = _language(body.language)
     return await _run(
@@ -134,7 +141,7 @@ async def explain(body: ExplainIn) -> dict:
     )
 
 
-@app.post("/api/ask")
+@app.post("/api/ask", dependencies=[Depends(rate_limited)])
 async def ask(body: AskIn) -> dict:
     lang = _language(body.language)
     return await _run(
@@ -144,7 +151,7 @@ async def ask(body: AskIn) -> dict:
     )
 
 
-@app.post("/api/coach")
+@app.post("/api/coach", dependencies=[Depends(rate_limited)])
 async def coach(body: CoachIn) -> dict:
     lang = _language(body.language)
     return await _run(

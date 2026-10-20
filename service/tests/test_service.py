@@ -78,3 +78,18 @@ def test_api_offline_mode():
         assert c.post("/api/ask", json={"question": "Who made the worst decisions?"}).status_code == 200
         assert "### Fix next" in c.post("/api/coach", json={"team": "NBR"}).json()["text"]
         assert c.post("/api/explain", json={"moment_id": -5}).status_code == 400
+
+
+def test_rate_limit():
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    from betterball_service.telemetry import RateLimiter
+
+    rl = RateLimiter(per_ip=2, global_limit=100)
+    req = Request({"type": "http", "headers": [(b"x-forwarded-for", b"1.2.3.4")], "client": ("9.9.9.9", 1)})
+    rl.check(req)
+    rl.check(req)
+    with pytest.raises(HTTPException) as e:
+        rl.check(req)
+    assert e.value.status_code == 429
