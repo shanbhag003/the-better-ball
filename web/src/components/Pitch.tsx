@@ -1,8 +1,10 @@
-import { ChevronRight, Maximize2, Minus, PanelRightOpen, Plus, RotateCcw, Tv } from "lucide-react";
+import { ChevronRight, Maximize2, Mic, Minus, PanelRightOpen, Plus, RotateCcw, Tv } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { follow, L, projector, W, type Cam, type Geom, type Proj } from "../camera";
 import { recentDecisions, snapshot } from "../data";
+import type { PunditScript, Voice } from "../api";
 import { goalPct, minute, pct, VERDICT } from "../labels";
+import { getPundit, lineTimes } from "../pundit";
 import type { Playback } from "../playback";
 import type { Decision, Match } from "../types";
 
@@ -15,8 +17,20 @@ const FONT = `"Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif
 const HOLD = 3.5; // real seconds a pass overlay stays readable during playback
 const HANDOFF = 0.35; // real seconds an older overlay takes to fade once a new pass is played
 
+type Span = readonly [number, number];
+interface Timeline {
+  spots: Span;
+  played: Span;
+  rewind: Span;
+  space: Span;
+  line: Span;
+  better: Span;
+  beaten: Span;
+  done: number;
+}
+
 /** Telestration timeline for a key moment in broadcast mode (seconds after it opens). */
-const T = {
+const DEFAULT_T: Timeline = {
   spots: [0.7, 0.4],
   played: [1.1, 0.9],
   rewind: [2.2, 0.4],
@@ -25,8 +39,39 @@ const T = {
   better: [3.0, 1.0],
   beaten: [3.8, 0.4],
   done: 4.3,
-} as const;
-const phase = (ph: number, [start, len]: readonly [number, number]) => Math.max(0, Math.min(1, (ph - start) / len));
+};
+
+/** Timeline that follows the pundit: line 1 = the pass played, line 2 = rewind + space, line 3 = better pass. */
+function timelineFor(starts: number[], total: number): Timeline {
+  const b1 = starts[1] ?? total * 0.35;
+  const b2 = starts[2] ?? total * 0.66;
+  return {
+    spots: [0.1, 0.4],
+    played: [0.5, Math.max(0.8, Math.min(1.6, (b1 - 0.5) * 0.8))],
+    rewind: [b1, 0.4],
+    space: [b1 + 0.2, 0.5],
+    line: [b1 + 0.4, 0.5],
+    better: [b2, Math.max(0.8, Math.min(1.4, (total - b2) * 0.5))],
+    beaten: [b2 + 0.8, 0.4],
+    done: total + 0.4,
+  };
+}
+
+const PUNDIT_TIMEOUT = 20000; // after this the plain breakdown runs; a late script still takes over
+const phase = (ph: number, [start, len]: Span) => Math.max(0, Math.min(1, (ph - start) / len));
+
+interface Tele {
+  id: number | null;
+  start: number;
+  done: boolean;
+  state: "waiting" | "running";
+  T: Timeline;
+  script: PunditScript | null;
+  starts: number[];
+  audio: HTMLAudioElement | null;
+  line: number;
+}
+const IDLE: Tele = { id: null, start: 0, done: false, state: "running", T: DEFAULT_T, script: null, starts: [], audio: null, line: -1 };
 
 interface Props {
   match: Match;
@@ -39,6 +84,8 @@ interface Props {
   /** Lower-third actions. */
   onDetails?: () => void;
   onNext?: (() => void) | null;
+  /** AI Pundit: script + voice for breakdowns (null when the AI service is unavailable). */
+  pundit?: { voice: Voice; language: string; sound: boolean } | null;
 }
 
 interface Hover {
@@ -47,11 +94,11 @@ interface Hover {
   y: number;
 }
 
-export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown, onDetails, onNext }: Props) {
+export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown, onDetails, onNext, pundit }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const propsRef = useRef({ selected, showBetter, broadcast, onBreakdown });
-  propsRef.current = { selected, showBetter, broadcast, onBreakdown };
+  const propsRef = useRef({ selected, showBetter, broadcast, onBreakdown, pundit });
+  propsRef.current = { selected, showBetter, broadcast, onBreakdown, pundit };
   const geom = useRef<Geom>({ s: 1, ox: 0, oy: 0, w: 0, h: 0 });
   const cam = useRef<Cam>({ mode: 0, fx: L / 2, fy: W / 2, zoom: 1 });
   const projRef = useRef<Proj | null>(null);
@@ -60,7 +107,9 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [zoomed, setZoomed] = useState(false);
   const posRef = useRef<[number, number][]>([]);
-  const tele = useRef<{ id: number | null; start: number; done: boolean }>({ id: null, start: 0, done: false });
+  const tele = useRef<Tele>({ ...IDLE });
+  const [caption, setCaption] = useState<{ waiting: boolean; text: string } | null>(null);
+  const [headline, setHeadline] = useState<string | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [lowerThird, setLowerThird] = useState<Decision | null>(null);
 
@@ -117,21 +166,27 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
 
       // ---- telestration clock (broadcast breakdown of a key moment)
       const breakdown = broadcast && sticky ? sticky : null;
-      if (breakdown && tele.current.id !== breakdown.id) {
-        tele.current = { id: breakdown.id, start: now, done: false };
-        setLowerThird(null);
-        onBreakdown?.(false);
+      if (breakdown && tele.current.id !== breakdown.id) startBreakdown(breakdown, now);
+      if (!breakdown && tele.current.id !== null) stopBreakdown();
+      const tl = tele.current;
+      const T = tl.T;
+      const waiting = !!breakdown && tl.state === "waiting";
+      // While the pundit's script loads, only the set-up (camera, dim, spotlights) plays.
+      const ph = breakdown ? (waiting ? Math.min((now - tl.start) / 1000, T.played[0] - 0.05) : (now - tl.start) / 1000) : 99;
+      if (breakdown && !waiting) {
+        const idx = tl.starts.length ? tl.starts.filter((s0) => ph >= s0).length - 1 : -1;
+        if (idx !== tl.line && tl.script) {
+          tl.line = idx;
+          if (idx >= 0) setCaption({ waiting: false, text: tl.script.lines[idx] });
+        }
+        if (!tl.done && ph >= T.done) {
+          tl.done = true;
+          setCaption(null);
+          setLowerThird(breakdown);
+          onBreakdown?.(true);
+        }
       }
-      if (!breakdown && tele.current.id !== null) {
-        tele.current = { id: null, start: 0, done: false };
-        setLowerThird(null);
-      }
-      const ph = breakdown ? (now - tele.current.start) / 1000 : 99;
-      if (breakdown && !tele.current.done && ph >= T.done) {
-        tele.current.done = true;
-        setLowerThird(breakdown);
-        onBreakdown?.(true);
-      }
+      const show = tl.script?.show ?? { space: true, back_line: true, beaten: true, offside: true };
 
       const better = (d: Decision) => showBetter && d.cost >= match.meta.good_threshold && !!d.best;
       const list: { d: Decision; alpha: number; sticky: boolean }[] = sticky
@@ -179,16 +234,16 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
       // ---- breakdown layers under the players: space, back line, offside line, spotlights
       if (breakdown) {
         const d = breakdown;
-        if (better(d) && d.best.receiver !== null) {
+        if (show.space && better(d) && d.best.receiver !== null) {
           drawSpace(ctx, proj, snap.pos, match, d, phase(ph, T.space));
         }
-        drawBackLine(ctx, proj, snap.pos, match, d.team, snap.period, phase(ph, T.line));
+        if (show.back_line) drawBackLine(ctx, proj, snap.pos, match, d.team, snap.period, phase(ph, T.line));
         const spotA = phase(ph, T.spots);
         spotlight(ctx, proj, snap.pos[d.player], PLAYED, spotA);
         if (d.chosen.receiver !== null) spotlight(ctx, proj, snap.pos[d.chosen.receiver], PLAYED, spotA);
         if (better(d) && d.best.receiver !== null) spotlight(ctx, proj, snap.pos[d.best.receiver], BETTER, spotA);
       }
-      if (sticky && sticky.offside_line != null) {
+      if (sticky && sticky.offside_line != null && (!breakdown || show.offside || !tl.script)) {
         const x = sticky.offside_line;
         line(ctx, P, [[x, 0], [x, W]], { color: OFFSIDE, width: 2, alpha: 0.85, dash: [7, 6] });
         const [lx, ly] = P(x, W);
@@ -235,7 +290,7 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
       const focus = sticky ? new Set([sticky.player, sticky.chosen.receiver, sticky.best.receiver]) : null;
       const beaten = new Map<number, string>();
       if (sticky) {
-        const beatenA = breakdown ? phase(ph, T.beaten) : 1;
+        const beatenA = breakdown ? (show.beaten ? phase(ph, T.beaten) : 0) : 1;
         if (beatenA > 0) {
           for (const i of sticky.chosen.beaten ?? []) beaten.set(i, PLAYED);
           if (better(sticky)) for (const i of sticky.best.beaten ?? []) beaten.set(i, BETTER);
@@ -347,9 +402,88 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
     return () => cancelAnimationFrame(raf);
   }, [match, pb]);
 
-  const replay = () => {
-    tele.current = { id: null, start: 0, done: false };
+  /** Open a breakdown: show the set-up at once, then run the pundit's script (or the default timing). */
+  function startBreakdown(d: Decision, now: number) {
+    tele.current.audio?.pause();
+    tele.current = { ...IDLE, id: d.id, start: now, state: "waiting" };
     setLowerThird(null);
+    setHeadline(null);
+    propsRef.current.onBreakdown?.(false);
+    const cfg = propsRef.current.pundit;
+    const begin = (script: PunditScript | null) => {
+      if (tele.current.id !== d.id) return;
+      // A script that arrives after the plain breakdown started takes over and replays it with the pundit.
+      if (tele.current.state !== "waiting") {
+        if (!script || tele.current.script) return;
+        tele.current.state = "waiting";
+        tele.current.done = false;
+        setLowerThird(null);
+        propsRef.current.onBreakdown?.(false);
+      }
+      const run = (total: number, audio: HTMLAudioElement | null) => {
+        if (tele.current.id !== d.id || tele.current.state !== "waiting") return;
+        const starts = script ? lineTimes(script.lines, total) : [];
+        Object.assign(tele.current, {
+          state: "running", start: performance.now(), script, starts, audio, line: -1,
+          T: script ? timelineFor(starts, total) : DEFAULT_T,
+        });
+        setHeadline(script?.headline ?? null);
+        audio?.play().catch(() => {}); // autoplay blocked: captions still run
+      };
+      if (!script) return run(DEFAULT_T.done, null);
+      const words = script.lines.join(" ").length / 15 + 1.2; // reading time without audio
+      if (script.audio && cfg?.sound) {
+        const audio = new Audio(script.audio);
+        let started = false;
+        const go = (secs: number) => {
+          if (started) return;
+          started = true;
+          run(Math.max(4, secs), audio);
+        };
+        audio.addEventListener("loadedmetadata", () => go(Number.isFinite(audio.duration) ? audio.duration : words));
+        window.setTimeout(() => go(words), 1500);
+      } else run(Math.max(4.3, words), null);
+    };
+    if (!cfg) {
+      begin(null);
+      return;
+    }
+    setCaption({ waiting: true, text: "AI Pundit is studying the play…" });
+    const timer = window.setTimeout(() => begin(null), PUNDIT_TIMEOUT);
+    getPundit(d.id, cfg.voice, cfg.language)
+      .then((script) => {
+        window.clearTimeout(timer);
+        begin(script);
+      })
+      .catch(() => {
+        window.clearTimeout(timer);
+        begin(null);
+      });
+  }
+
+  function stopBreakdown() {
+    tele.current.audio?.pause();
+    tele.current = { ...IDLE };
+    setLowerThird(null);
+    setCaption(null);
+    setHeadline(null);
+  }
+
+  // Muting mid-breakdown stops the voice; leaving the component stops it too.
+  useEffect(() => {
+    if (!pundit?.sound) tele.current.audio?.pause();
+  }, [pundit?.sound]);
+  useEffect(() => () => tele.current.audio?.pause(), []);
+
+  const replay = () => {
+    const tl = tele.current;
+    if (!tl.script && tl.id === null) return;
+    tl.audio?.pause();
+    if (tl.audio) tl.audio.currentTime = 0;
+    Object.assign(tl, { start: performance.now(), done: false, line: -1, state: "running" });
+    setLowerThird(null);
+    propsRef.current.onBreakdown?.(false);
+    tl.audio?.play().catch(() => {});
   };
 
   const setView = (k: number, px: number, py: number) => {
@@ -456,17 +590,24 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
           <span className="muted"> · {hp.position}</span>
         </div>
       )}
+      {broadcast && caption && !lowerThird && (
+        <div className={`pundit-caption ${caption.waiting ? "waiting" : ""}`} aria-live="polite">
+          <span className="pc-badge"><Mic size={12} /> AI PUNDIT</span>
+          <span className="pc-text">{caption.text}</span>
+        </div>
+      )}
       {broadcast && lowerThird && (
-        <LowerThird match={match} d={lowerThird} onReplay={replay} onDetails={onDetails} onNext={onNext ?? null} />
+        <LowerThird match={match} d={lowerThird} headline={headline} onReplay={replay} onDetails={onDetails} onNext={onNext ?? null} />
       )}
     </div>
   );
 }
 
 /** Broadcast lower-third graphic summarising the breakdown. */
-function LowerThird({ match, d, onReplay, onDetails, onNext }: {
+function LowerThird({ match, d, headline, onReplay, onDetails, onNext }: {
   match: Match;
   d: Decision;
+  headline: string | null;
   onReplay: () => void;
   onDetails?: () => void;
   onNext: (() => void) | null;
@@ -478,14 +619,15 @@ function LowerThird({ match, d, onReplay, onDetails, onNext }: {
   const who = (i: number | null) => (i === null ? "Shot" : `#${match.players[i].number} ${match.players[i].name.split(" ")[1]}`);
   return (
     <div className="lower-third" role="status">
-      <div className="lt-brand"><Tv size={13} /> BETTER BALL ANALYSIS</div>
+      <div className="lt-brand"><Tv size={13} /> BETTER BALL ANALYSIS{headline ? " · AI PUNDIT" : ""}</div>
       <div className="lt-main">
         <span className="lt-bar" style={{ background: team.color }} />
         <span className="lt-num" style={{ background: team.color }}>{p.number}</span>
         <div className="lt-text">
           <div className="lt-title">
             <span className={`lt-verdict ${v.tone}`}>{v.label}</span>
-            <b>{p.name.toUpperCase()}</b>
+            <b>{headline ? headline.toUpperCase() : p.name.toUpperCase()}</b>
+            {headline && <span className="lt-who">{p.name}</span>}
             <span className="lt-min">{minute(d.t)}</span>
           </div>
           <div className="lt-sub">

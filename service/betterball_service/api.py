@@ -31,7 +31,9 @@ def _load_env_file(path: Path) -> None:
 
 _load_env_file(Path(__file__).resolve().parents[1] / ".env")
 
-from . import agents, offline, store  # noqa: E402
+import base64  # noqa: E402
+
+from . import agents, offline, speech, store  # noqa: E402
 from .mcp_server import mcp  # noqa: E402
 from .telemetry import limiter, setup_telemetry  # noqa: E402
 
@@ -123,7 +125,8 @@ async def _run(key: tuple, online, fallback) -> dict:
         log.exception("agent call failed")
         raise HTTPException(502, f"The AI service failed: {type(e).__name__}") from e
     body = result if isinstance(result, dict) else {"text": result}
-    body["text"] = body["text"].strip()
+    if isinstance(body.get("text"), str):
+        body["text"] = body["text"].strip()
     out = {**body, **meta, "ms": round((time.perf_counter() - started) * 1000)}
     _cache[key] = out
     return out
@@ -133,6 +136,13 @@ class ExplainIn(BaseModel):
     moment_id: int
     voice: Voice = "fan"
     language: str = "English"
+
+
+class PunditIn(BaseModel):
+    moment_id: int
+    voice: Voice = "fan"
+    language: str = "English"
+    audio: bool = True
 
 
 class AskIn(BaseModel):
@@ -188,6 +198,24 @@ async def explain(body: ExplainIn) -> dict:
         lambda client: agents.explain(body.moment_id, body.voice, lang, client=client),
         lambda: offline.explain(body.moment_id, body.voice),
     )
+
+
+@app.post("/api/pundit", dependencies=[Depends(rate_limited)])
+async def pundit(body: PunditIn) -> dict:
+    """AI Pundit: a script for the broadcast breakdown, read aloud by Azure AI Speech."""
+    lang = _language(body.language)
+    out = await _run(
+        ("pundit", body.moment_id, body.voice, lang),
+        lambda client: agents.pundit_script(body.moment_id, body.voice, lang, client=client),
+        lambda: offline.pundit(body.moment_id),
+    )
+    out.setdefault("text", " ".join(out.get("lines", [])))
+    if body.audio and "audio" not in out:
+        mp3 = await speech.synthesize(out.get("lines", []), lang, body.voice)
+        out["audio"] = f"data:audio/mpeg;base64,{base64.b64encode(mp3).decode()}" if mp3 else None
+        out["speech_voice"] = speech.voice_for(lang, body.voice)[1] if mp3 else None
+        _cache[("pundit", body.moment_id, body.voice, lang)] = {k: v for k, v in out.items() if k != "cached"}
+    return out
 
 
 @app.post("/api/ask", dependencies=[Depends(rate_limited)])

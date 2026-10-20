@@ -65,3 +65,25 @@ def coach(team: str, as_of: float | None = None) -> str:
             f"### Player spotlight\n- Most room to improve: {weak}.\n\n"
             "_Offline template: connect a Foundry model for the AI coach._"
         )
+
+
+def pundit(moment_id: int) -> dict:
+    """Template breakdown used without a Foundry model."""
+    f = store.get_moment(moment_id)
+    who = f["player"].split(" (")[0]
+    played, better = f["played"], f["better_option"]
+    to = (played["to"] or "goal").split(" (")[0]
+    lines = [
+        f"{f['minute']} minutes in, {who} has the ball for {f['team']}.",
+        f"He goes to {to}: only {played['chance_it_arrives']} to arrive, {played['goal_chance']} goal chance.",
+    ]
+    if better:
+        bto = (better["to"] or "goal").split(" (")[0]
+        lines.append(f"The pass was on to {bto}: {better['goal_chance']} goal chance, {f['goal_chance_missed']} left behind.")
+    return {
+        "headline": f["verdict"].split(" (")[0].upper(),
+        "lines": lines,
+        "show": {"space": bool(better), "back_line": bool(better and better.get("defenders_beaten")),
+                 "beaten": bool((better or {}).get("defenders_beaten") or played.get("defenders_beaten")),
+                 "offside": bool(f.get("teammates_offside"))},
+    }

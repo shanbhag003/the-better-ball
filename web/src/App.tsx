@@ -8,6 +8,7 @@ import { Pitch } from "./components/Pitch";
 import { Sidebar } from "./components/Sidebar";
 import { clock, loadMatch, scoreAt } from "./data";
 import { useAiPrefs } from "./aiPrefs";
+import { prefetchPundit } from "./pundit";
 import { AiBadge } from "./components/Ai";
 import { cutoffFor, LiveContext, seen } from "./live";
 import { Playback, usePlayback } from "./playback";
@@ -16,6 +17,7 @@ import type { Decision, Match } from "./types";
 const DATA_URL = `${import.meta.env.BASE_URL}data/match_7.json`;
 const ONBOARD_KEY = "tbb-onboarded-v1";
 const BROADCAST_OFF_KEY = "tbb-broadcast-off";
+const MUTE_KEY = "tbb-pundit-muted";
 const LEAD_IN = 4; // seconds of build-up shown before a key moment
 
 function readFlag(key: string) {
@@ -71,6 +73,19 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
     writeValue(BROADCAST_OFF_KEY, on ? "0" : "1");
   };
   const [breakdownDone, setBreakdownDone] = useState(false);
+  const aiPrefs = useAiPrefs();
+  const [sound, setSoundState] = useState(() => !readFlag(MUTE_KEY));
+  const setSound = (on: boolean) => {
+    setSoundState(on);
+    writeValue(MUTE_KEY, on ? "0" : "1");
+  };
+  const punditOn = broadcast && aiPrefs.health !== null;
+  const prefetch = useCallback(
+    (id: number) => {
+      if (punditOn) prefetchPundit(id, aiPrefs.voice, aiPrefs.language);
+    },
+    [punditOn, aiPrefs.voice, aiPrefs.language],
+  );
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [autoStop, setAutoStop] = useState(true);
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
@@ -110,12 +125,13 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
       setSelected(null);
       setTourIdx(Math.max(0, allMoments.indexOf(d)));
       pending.current = d;
+      prefetch(d.id);
       pb.pause();
       pb.setSpeed(1);
       pb.seek(d.t - LEAD_IN);
       pb.play();
     },
-    [pb, allMoments],
+    [pb, allMoments, prefetch],
   );
 
   const startTour = useCallback(() => {
@@ -130,6 +146,8 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
       const p = pending.current;
       if (p && from < p.t && to >= p.t) return p.t;
       if (autoStop) {
+        const soon = allMoments.find((d) => d.t > to && d.t - to < 10);
+        if (soon) prefetch(soon.id);
         const hit = allMoments.find((d) => from < d.t && to >= d.t);
         if (hit) return hit.t;
       }
@@ -140,7 +158,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
       pending.current = null;
       setSelected(d);
     };
-  }, [pb, allMoments, autoStop]);
+  }, [pb, allMoments, autoStop, prefetch]);
 
   // Drop the card once playback moves on.
   useEffect(() => {
@@ -207,6 +225,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
               onBreakdown={(done) => { setBreakdownDone(done); if (!done) setDetailsOpen(false); }}
               onDetails={() => setDetailsOpen(true)}
               onNext={nextMoment ? () => goTo(nextMoment) : null}
+              pundit={punditOn ? { voice: aiPrefs.voice, language: aiPrefs.language, sound } : null}
             />
 
             {!started && !pb.playing && (
@@ -246,6 +265,9 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
             setAutoStop={setAutoStop}
             broadcast={broadcast}
             setBroadcast={setBroadcast}
+            sound={sound}
+            setSound={setSound}
+            punditOn={punditOn}
             moments={moments}
             onMoment={goTo}
           />

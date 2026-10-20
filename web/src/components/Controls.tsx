@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Keyboard, Pause, Play, RotateCcw, RotateCw, Sparkles, Tv } from "lucide-react";
+import { Eye, EyeOff, Keyboard, Pause, Play, RotateCcw, RotateCw, Sparkles, Tv, Volume2, VolumeX } from "lucide-react";
 import { useRef, useState } from "react";
 import { minute, VERDICT } from "../labels";
 import { seen, useLive } from "../live";
@@ -14,13 +14,16 @@ interface Props {
   setAutoStop: (v: boolean) => void;
   broadcast: boolean;
   setBroadcast: (v: boolean) => void;
+  sound: boolean;
+  setSound: (v: boolean) => void;
+  punditOn: boolean;
   moments: Decision[];
   onMoment: (d: Decision) => void;
 }
 
 const SPEEDS = [1, 2, 4, 8];
 
-export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAutoStop, broadcast, setBroadcast, moments, onMoment }: Props) {
+export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAutoStop, broadcast, setBroadcast, sound, setSound, punditOn, moments, onMoment }: Props) {
   usePlayback(pb);
   return (
     <div className="controls card">
@@ -57,6 +60,12 @@ export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAu
           <button className={`chip-toggle ${broadcast ? "on broadcast" : ""}`} onClick={() => setBroadcast(!broadcast)} aria-pressed={broadcast}>
             <Tv size={14} /> Broadcast view
           </button>
+          {punditOn && (
+            <button className={`chip-toggle ${sound ? "on broadcast" : ""}`} onClick={() => setSound(!sound)} aria-pressed={sound}
+              title="AI Pundit commentary, voiced by Azure AI Speech">
+              {sound ? <Volume2 size={14} /> : <VolumeX size={14} />} Pundit voice
+            </button>
+          )}
           <button className={`chip-toggle ${showBetter ? "on better" : ""}`} onClick={() => setShowBetter(!showBetter)} aria-pressed={showBetter}>
             {showBetter ? <Eye size={14} /> : <EyeOff size={14} />} Better passes
           </button>

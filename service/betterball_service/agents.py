@@ -5,6 +5,8 @@ Agents
   * Narrator - turns facts into short, plain language for a chosen audience (fan / analyst) and language.
   * Attack coach and Ball-security coach - specialists that review one team in parallel.
   * Head coach - merges the specialists' notes into one half-time / full-time report.
+  * Pundit   - directs the broadcast breakdown of a key moment: headline, three spoken beats, and
+               which telestration layers to show (space, back line, beaten defenders, offside).
 
 Orchestrations
   * explain(moment)  : Narrator alone, fed the moment's facts (fast, cheap, deterministic grounding).
@@ -19,6 +21,7 @@ revealing or predicting the result.
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -29,6 +32,7 @@ from pydantic import BaseModel, Field
 from agent_framework.orchestrations import ConcurrentBuilder
 
 from . import store
+from .identity import sync_credential
 
 log = logging.getLogger("betterball")
 
@@ -69,13 +73,12 @@ def fallback_model() -> str | None:
 def make_client(model: str | None = None):
     """Foundry chat client (Responses API). Uses Azure CLI login locally, managed identity in Azure."""
     from agent_framework.foundry import FoundryChatClient
-    from azure.identity import DefaultAzureCredential
 
     _ensure_azure_cli_on_path()
     return FoundryChatClient(
         project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
         model=model or os.environ["FOUNDRY_MODEL"],
-        credential=DefaultAzureCredential(exclude_interactive_browser_credential=True),
+        credential=sync_credential(),
         # Tool errors (e.g. "'Stanley' is ambiguous: ...") go back to the model so it can correct
         # itself; hard limits keep a confused agent from looping.
         function_invocation_configuration={
@@ -307,7 +310,9 @@ async def ask(question: str, voice: str = "fan", language: str = "English", clie
             f"Findings from the Analyst (all numbers come from the match tools):\n{findings}\n\n"
             f"Answer the question directly, first sentence first. Use only these findings. {ASK_FORMAT}"
         )
-        reply = await narrator(client, voice, language).run(prompt, options={"response_format": AskReply})
+        reply = await narrator(client, voice, language).run(
+            prompt, options={"response_format": AskReply, "max_tokens": 900, "temperature": 0.5}
+        )
         try:
             parsed = reply.value if isinstance(reply.value, AskReply) else None
         except Exception:  # noqa: BLE001 - malformed JSON from the model
@@ -342,3 +347,102 @@ async def coach(team: str, voice: str = "analyst", language: str = "English", cl
             f"{rules}\n\nSpecialist notes for {team_name}:\n{notes}\n\nWrite the report covering only what has happened {scope}."
         )
         return _text(report)
+
+
+# ----------------------------------------------------------------- pundit
+
+class PunditShow(BaseModel):
+    space: bool = Field(description="Shade the space the better receiver could reach first")
+    back_line: bool = Field(description="Draw the defending back line")
+    beaten: bool = Field(description="Light up the defenders the passes take out of the game")
+    offside: bool = Field(description="Show the offside line and flag offside team-mates")
+
+
+class PunditScript(BaseModel):
+    headline: str = Field(description="2-5 word broadcast headline, e.g. 'THE RUN NOBODY FOUND'")
+    lines: list[str] = Field(description="Exactly 3 short spoken lines: the set-up, the pass played, what was on")
+    show: PunditShow
+
+
+def pundit(client, voice: str, language: str) -> Agent:
+    return Agent(
+        client,
+        name="Pundit",
+        description="TV pundit who directs a telestration breakdown of one moment.",
+        instructions=(
+            "You are a TV football pundit doing a telestration breakdown on a big Monday-night analysis show. "
+            f"Write in {language}, in spoken style, present tense, energetic but precise. "
+            "Line 1 sets the scene (who has the ball and where). Line 2 is the pass he played and why it fell short, "
+            "using the 'chance it arrives' or 'goal chance' numbers. Line 3 is what was on instead: the better option, "
+            "the space or defenders it beats, and the goal chance missed. Max 16 words per line, no hashtags, no emojis. "
+            "Keep the numbers straight: 'goal_chance' is the chance an option leads to a goal; 'goal_chance_missed' is "
+            "the difference between the better option and the pass played. "
+            "SHOW lists the telestration layers to draw: 'space' when the better option goes into space or the "
+            "receiver is free; 'back_line' when the better pass breaks or goes behind the defensive line; 'beaten' "
+            "only if defenders are beaten; 'offside' only if a team-mate was offside. "
+            "Reply in exactly this format and nothing else:\n"
+            "HEADLINE: <2-5 punchy words, no player names>\n1: <line>\n2: <line>\n3: <line>\n"
+            f"SHOW: <comma-separated from space, back_line, beaten, offside, or none>\n{GROUNDING}"
+        ),
+    )
+
+
+_LINE = re.compile(r"^\s*(HEADLINE|1|2|3|SHOW)\s*[:.)-]\s*(.+?)\s*$", re.IGNORECASE)
+
+
+def parse_script(text: str) -> PunditScript | None:
+    """Parse the pundit's 5-line reply; tolerant of extra spaces, numbering styles and run-on endings."""
+    fields: dict[str, str] = {}
+    for raw in text.splitlines():
+        m = _LINE.match(raw)
+        if m and m.group(1).upper() not in fields:
+            fields[m.group(1).upper()] = m.group(2)
+    lines = [fields[k] for k in ("1", "2", "3") if fields.get(k)]
+    if "HEADLINE" not in fields or len(lines) < 2:
+        return None
+    # Trim any run-on: keep the first sentence or two, at most ~24 words.
+    # Drop word hashtags (#MNF) but keep shirt numbers (#9 Dunford).
+    lines = [re.sub(r"\s#[A-Za-z]\w*", "", " ".join(re.split(r"\s+", ln)[:24])).strip() for ln in lines]
+    show = {k.strip().lower() for k in fields.get("SHOW", "").split(",")}
+    return PunditScript(
+        headline=" ".join(fields["HEADLINE"].split()[:6]).strip(" *#\"'"),
+        lines=lines,
+        show=PunditShow(space="space" in show, back_line="back_line" in show,
+                        beaten="beaten" in show, offside="offside" in show),
+    )
+
+
+def check_show(show: PunditShow, facts: dict) -> dict:
+    """Keep only layers the facts support, so the visuals never contradict the data."""
+    better = facts.get("better_option") or {}
+    beaten = bool(better.get("defenders_beaten") or facts["played"].get("defenders_beaten"))
+    out = {
+        "space": bool(show.space and better),
+        "back_line": bool(show.back_line and better),
+        "beaten": bool(show.beaten and beaten),
+        "offside": bool(show.offside and (facts.get("teammates_offside") or "Offside" in facts.get("verdict", ""))),
+    }
+    if better and not any(out.values()):
+        out["space"] = True  # a breakdown always shows at least the option that was on
+    return out
+
+
+async def pundit_script(moment_id: int, voice: str = "fan", language: str = "English", client=None) -> dict:
+    facts = store.get_moment(moment_id)
+    agent = pundit(client or make_client(), voice, language)
+    script = None
+    # Plain-text reply with a tight cap (a run-on line just gets cut), and one quick retry on the same
+    # model before the API falls back to the slower backup deployment.
+    for _ in range(2):
+        reply = await agent.run(
+            "Break down this moment for the viewers.\nFacts:\n" + json.dumps(facts),
+            options={"max_tokens": 260, "temperature": 0.6},
+        )
+        script = parse_script(_text(reply))
+        if script is not None:
+            break
+        log.warning("pundit reply unparseable; retrying")
+    if script is None or len(script.lines) < 2:
+        raise RuntimeError("The pundit did not return a usable script")
+    return {"headline": script.headline.strip(), "lines": [x.strip() for x in script.lines[:3]],
+            "show": check_show(script.show, facts)}

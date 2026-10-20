@@ -54,6 +54,16 @@ export interface MomentCard {
 
 export type Card = PlayerCard | TeamsCard | MomentCard;
 
+export interface PunditScript {
+  headline: string;
+  lines: string[];
+  show: { space: boolean; back_line: boolean; beaten: boolean; offside: boolean };
+  audio: string | null; // data: URI (mp3) from Azure AI Speech, or null
+  speech_voice: string | null;
+  mode: "foundry" | "offline";
+  model: string | null;
+}
+
 export interface AiHealth {
   ok: boolean;
   mode: "foundry" | "offline";
@@ -80,6 +90,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export const ai = {
   health: (): Promise<AiHealth> => fetch(`${BASE}/api/health`).then((r) => (r.ok ? r.json() : Promise.reject())),
   explain: (moment_id: number, voice: Voice, language: string) => post<AiAnswer>("/api/explain", { moment_id, voice, language }),
+  pundit: (moment_id: number, voice: Voice, language: string, audio = true) =>
+    post<PunditScript>("/api/pundit", { moment_id, voice, language, audio }),
   ask: (question: string, voice: Voice, language: string, as_of: number | null) =>
     post<AiAnswer>("/api/ask", { question, voice, language, as_of }),
   coach: (team: string, voice: Voice, language: string, as_of: number | null) =>

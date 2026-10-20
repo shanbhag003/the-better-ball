@@ -122,3 +122,15 @@ def test_api_live_as_of_and_cards(api_client):
     assert r["as_of"] == 1200 and r["cards"][0]["kind"] == "teams" and len(r["follow_ups"]) == 3
     assert c.post("/api/coach", json={"team": "NBR", "as_of": 120}).status_code == 400  # too early
     assert c.post("/api/coach", json={"team": "NBR", "as_of": 99999}).json()["as_of"] is None  # full time
+
+
+def test_parse_pundit_script():
+    from betterball_service.agents import parse_script
+
+    s = parse_script(
+        "HEADLINE: The Run Nobody Found\n1: Coledale has it in midfield.\n2) He goes short, 61% to arrive.\n"
+        "3 - #9 Dunford was free behind them #football #MNF\nSHOW: space, back_line"
+    )
+    assert s.headline == "The Run Nobody Found" and len(s.lines) == 3
+    assert s.lines[2] == "#9 Dunford was free behind them" and s.show.space and s.show.back_line and not s.show.beaten
+    assert parse_script("Sorry, I can't help with that.") is None

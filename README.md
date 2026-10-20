@@ -88,6 +88,8 @@ A React app that replays the match on an animated 2D pitch:
 | **MCP server** (`mcp_server.py`) | Exposes the decision engine as 7 tools (`match_summary`, `key_moments`, `get_moment`, `search_decisions`, `player_report`, `team_report`, `compare_players`) over streamable HTTP at `/mcp`. Any MCP client can use it, including the agents below and VS Code. |
 | **Narrator agent** | **Explain** button on each decision card: turns the moment's facts into 3–4 sentences in *fan* or *analyst* voice, in 8 languages. |
 | **Analyst → Narrator** (sequential workflow) | **Ask AI** tab: the Analyst calls the MCP tools to gather evidence, then the Narrator answers for the chosen audience. |
+| **AI Pundit** | Directs each Broadcast-view breakdown: writes a headline and three spoken beats, and **chooses which telestration layers to draw** (space, back line, beaten defenders, offside). The animation is timed to its voice. |
+| **Azure AI Speech** | Reads the Pundit's lines aloud with neural voices in 8 languages (keyless, via the app's managed identity). |
 | **Attack coach ‖ Ball-security coach → Head coach** (concurrent workflow) | **AI coach report**: two specialists review the team in parallel; the head coach merges their notes into *What worked / Fix next / Player spotlight*. |
 
 **Grounding:** agents may only use numbers returned by the tools; the prompts forbid inventing players, minutes or stats.
@@ -135,6 +137,7 @@ Outputs:
 | **Managed identity** | The container app pulls from ACR and calls Foundry with its own identity: no keys anywhere |
 | **Azure Container Registry** | Stores the API image |
 | **Azure Static Web Apps** | Serves the React replay and match data |
+| **Azure AI Speech** | Neural text-to-speech for the AI Pundit, on the same Foundry (AI Services) resource with Entra ID auth |
 | **Application Insights + Log Analytics** | Request traces, agent and tool-call spans (Agent Framework OpenTelemetry), logs |
 | **GitHub Actions** | CI on pull requests; on `main`: tests → build and push the image → roll out the Container App → deploy the web app. Signs in to Azure with OIDC (no secrets that can leak) |
 
