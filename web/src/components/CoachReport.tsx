@@ -1,4 +1,4 @@
-import { ClipboardList, Shield, Swords } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { useState } from "react";
 import { ai, type AiAnswer } from "../api";
 import { useAiPrefs } from "../aiPrefs";
@@ -44,11 +44,11 @@ export function CoachPanel({ match }: { match: Match }) {
       </div>
 
       <div className="crew">
-        <span className="crew-step"><Swords size={14} /> Attack coach</span>
+        <span className="crew-step">Attack coach</span>
         <span className="crew-plus">+</span>
-        <span className="crew-step"><Shield size={14} /> Security coach</span>
+        <span className="crew-step">Security coach</span>
         <span className="crew-arrow">→</span>
-        <span className="crew-step lead"><ClipboardList size={14} /> Head coach</span>
+        <span className="crew-step lead">Head coach</span>
       </div>
 
       <div className="eb-row">

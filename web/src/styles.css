@@ -469,8 +469,8 @@ select.lang option { background: var(--purple-deep); }
 .tabs button { font-size: 12px; gap: 4px; padding: 0 2px; }
 
 .coach-panel .cr-body { flex: 1; }
-.crew { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11.5px; font-weight: 600; flex: none; }
-.crew-step { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
+.crew { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 11px; font-weight: 600; flex: none; }
+.crew-step { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; white-space: nowrap; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
 .crew-step.lead { color: var(--better); border-color: rgba(0,255,133,0.35); }
 .crew-plus, .crew-arrow { color: var(--muted); }
 .coach-report { display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1; }
