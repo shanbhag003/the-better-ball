@@ -5,6 +5,7 @@ import { recentDecisions, snapshot } from "../data";
 import type { PunditScript, Voice } from "../api";
 import { goalPct, minute, pct, VERDICT } from "../labels";
 import { getPundit, lineTimes } from "../pundit";
+import { drawStadium } from "../stadium";
 import type { Playback } from "../playback";
 import type { Decision, Match } from "../types";
 
@@ -216,6 +217,7 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
       projRef.current = proj;
       const { P } = proj;
 
+      drawStadium(ctx, proj, g, [match.teams[0].color, match.teams[1].color], now, breakdown ? 0.45 : 0);
       drawPitch(ctx, proj, g);
 
       // ---- dim the pitch around the breakdown
