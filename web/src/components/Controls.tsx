@@ -1,6 +1,7 @@
 import { Eye, EyeOff, Keyboard, Pause, Play, RotateCcw, RotateCw, Sparkles } from "lucide-react";
 import { useRef, useState } from "react";
 import { minute, VERDICT } from "../labels";
+import { seen, useLive } from "../live";
 import { usePlayback, type Playback } from "../playback";
 import type { Decision, Match, MatchEvent } from "../types";
 
@@ -70,6 +71,7 @@ const TICKS = [0, 15, 30, 45, 60, 75, 90];
 
 function Timeline({ match, pb, moments, onMoment }: { match: Match; pb: Playback; moments: Decision[]; onMoment: (d: Decision) => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const { asOf } = useLive();
   const [hover, setHover] = useState<{ x: number; text: string } | null>(null);
   const { t0, duration } = match.meta;
   const frac = (t: number) => ((t - t0) / duration) * 100;
@@ -108,7 +110,7 @@ function Timeline({ match, pb, moments, onMoment }: { match: Match; pb: Playback
     >
       {/* Goals ride above the track. */}
       <div className="lane goals">
-        {match.goals.map((g) => (
+        {match.goals.filter((g) => seen(g.t, asOf)).map((g) => (
           <span
             key={g.id}
             className="marker goal"

@@ -10,8 +10,23 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
+
+# Live mode: when set, every tool only sees the match up to this many seconds (no spoilers).
+AS_OF: ContextVar[float | None] = ContextVar("betterball_as_of", default=None)
+
+
+@contextmanager
+def as_of(seconds: float | None):
+    """Run tools as if the match were at `seconds` (None = full match)."""
+    token = AS_OF.set(seconds)
+    try:
+        yield
+    finally:
+        AS_OF.reset(token)
 
 GOOD_VERDICTS = {"optimal", "good"}
 VERDICT_LABEL = {
@@ -55,6 +70,49 @@ class Match:
         self.player_stats = bundle["player_stats"]
         self.goals = [e for e in bundle["events"] if e["type"] == "goal"]
         self.threshold = bundle["meta"].get("good_threshold", 0.012)
+
+    # ---------------------------------------------------------------- live view
+    @property
+    def end(self) -> float:
+        return self.b["meta"]["t0"] + self.b["meta"]["duration"]
+
+    def cutoff(self) -> float:
+        t = AS_OF.get()
+        return self.end if t is None else min(t, self.end)
+
+    def live(self) -> bool:
+        return self.cutoff() < self.end
+
+    def seen(self) -> dict[int, dict]:
+        """Decisions that have happened by the cutoff."""
+        c = self.cutoff()
+        return {i: d for i, d in self.decisions.items() if d["t"] <= c}
+
+    def goals_seen(self) -> list[dict]:
+        c = self.cutoff()
+        return [g for g in self.goals if g["t"] <= c]
+
+    def status(self) -> dict:
+        c = self.cutoff()
+        if not self.live():
+            return {"state": "full time", "score": list(self.b["meta"]["score"])}
+        half = "1st half" if c < self.b["meta"]["t0"] + self.b["meta"]["duration"] / 2 else "2nd half"
+        return {
+            "state": f"LIVE, minute {_minute(c)} ({half}); the rest of the match has not been played yet",
+            "score": self.score_at(c),
+        }
+
+    def stats(self, ds: list[dict]) -> dict:
+        passes = [d for d in ds if d["type"] == "pass" and d.get("outcome")]
+        shots = [d for d in ds if d["type"] == "shot"]
+        good = sum(d["verdict"] in GOOD_VERDICTS for d in ds)
+        return {
+            "decisions": len(ds),
+            "good_decisions_pct": round(100 * good / len(ds)) if ds else None,
+            "pass_accuracy_pct": round(100 * sum(d["outcome"] == "complete" for d in passes) / len(passes)) if passes else None,
+            "shots": len(shots),
+            "xg": round(sum(d["chosen"]["ev"] for d in shots), 2),
+        }
 
     # ---------------------------------------------------------------- lookups
     def team_index(self, team: str | int | None) -> int | None:
@@ -142,36 +200,40 @@ def load(path: str | None = None) -> Match:
 # Each tool returns compact JSON-ready facts. Docstrings are what the agents see.
 
 def match_summary() -> dict:
-    """Score, goals and headline decision stats for both teams."""
+    """Match status (live minute or full time), score, goals so far and headline decision stats per team."""
     m = load()
+    seen = m.seen()
+    score = m.status()["score"]
     teams = []
     for k, t in enumerate(m.teams):
-        s = m.team_stats[str(k)]
-        verdicts = Counter(d["verdict"] for d in m.decisions.values() if d["team"] == k)
+        ds = [d for d in seen.values() if d["team"] == k]
+        st = m.stats(ds)
+        verdicts = Counter(d["verdict"] for d in ds)
         teams.append({
             "team": t["name"],
             "short": t["short"],
             "formation": t["formation"],
             "style": t["style"],
-            "goals": m.b["meta"]["score"][k],
-            "good_decisions": f"{round(s['decision_score'])}%",
-            "pass_accuracy": f"{round(s['pass_completion'])}%",
-            "shots": s["shots"],
-            "xg": s["xg"],
+            "goals": score[k],
+            "good_decisions": f"{st['good_decisions_pct']}%" if ds else None,
+            "pass_accuracy": f"{st['pass_accuracy_pct']}%" if st["pass_accuracy_pct"] is not None else None,
+            "shots": st["shots"],
+            "xg": st["xg"],
             "missed_chances": verdicts["missed_progression"],
             "clear_upgrades_missed": verdicts["clear_upgrade"],
             "too_risky": verdicts["too_risky"],
             "offside_passes": verdicts["offside"],
         })
-    goals = [{"minute": _minute(g["t"]), "scorer": m.who(g["player"]), "score": g.get("score")} for g in m.goals]
-    return {"teams": teams, "goals": goals, "note": "Synthetic match between fictional clubs."}
+    goals = [{"minute": _minute(g["t"]), "scorer": m.who(g["player"]), "score": g.get("score")} for g in m.goals_seen()]
+    return {"status": m.status(), "teams": teams, "goals": goals, "note": "Synthetic match between fictional clubs."}
 
 
 def key_moments(team: str | None = None, limit: int = 8) -> list[dict]:
-    """The biggest missed chances of the match, optionally for one team (name or short code)."""
+    """The biggest missed chances so far, optionally for one team (name or short code)."""
     m = load()
     ti = m.team_index(team)
-    ids = [i for i in m.key_ids if ti is None or m.decisions[i]["team"] == ti]
+    seen = m.seen()
+    ids = [i for i in m.key_ids if i in seen and (ti is None or m.decisions[i]["team"] == ti)]
     ids.sort(key=lambda i: m.decisions[i]["cost"], reverse=True)
     return [m.moment_facts(i) for i in ids[: max(1, min(limit, 20))]]
 
@@ -181,6 +243,8 @@ def get_moment(moment_id: int) -> dict:
     m = load()
     if moment_id not in m.decisions:
         raise ValueError(f"No decision with id {moment_id}.")
+    if moment_id not in m.seen():
+        raise ValueError("That moment has not happened yet in the match.")
     return m.moment_facts(moment_id)
 
 
@@ -200,7 +264,7 @@ def search_decisions(
     ti = m.team_index(team)
     half_t = m.b["meta"]["duration"] / 2 + m.b["meta"]["t0"]
     out = []
-    for eid, d in m.decisions.items():
+    for eid, d in m.seen().items():
         if pi is not None and d["player"] != pi:
             continue
         if ti is not None and d["team"] != ti:
@@ -221,18 +285,17 @@ def player_report(player: str) -> dict:
     Accepts a name ('Stanley'), full name or shirt number with team ('#8 NBR')."""
     m = load()
     pi = m.player_index(player)
-    mine = {i: d for i, d in m.decisions.items() if d["player"] == pi}
-    s = m.player_stats.get(str(pi), {})
+    mine = {i: d for i, d in m.seen().items() if d["player"] == pi}
+    st = m.stats(list(mine.values()))
     verdicts = Counter(d["verdict"] for d in mine.values())
     worst = sorted(mine, key=lambda i: mine[i]["cost"], reverse=True)[:3]
     passes = [d for d in mine.values() if d["type"] == "pass"]
-    completed = sum(d["outcome"] == "complete" for d in passes)
     forward = [d for d in passes if d["chosen"].get("bypassed", 0) > 0]
     return {
         "player": m.who(pi),
         "decisions": len(mine),
-        "good_decisions": f"{round(s.get('decision_score', 0))}%",
-        "pass_accuracy": f"{round(100 * completed / len(passes))}%" if passes else None,
+        "good_decisions": f"{st['good_decisions_pct']}%" if mine else None,
+        "pass_accuracy": f"{st['pass_accuracy_pct']}%" if st["pass_accuracy_pct"] is not None else None,
         "line_breaking_passes": len(forward),
         "verdicts": {VERDICT_LABEL.get(k, k): v for k, v in verdicts.most_common()},
         "worst_moments": [m.moment_facts(i) for i in worst if mine[i]["cost"] >= m.threshold],
@@ -245,11 +308,13 @@ def team_report(team: str) -> dict:
     ti = m.team_index(team)
     if ti is None:
         raise ValueError("Give a team name or short code.")
-    mine = {i: d for i, d in m.decisions.items() if d["team"] == ti}
+    mine = {i: d for i, d in m.seen().items() if d["team"] == ti}
     half_t = m.b["meta"]["duration"] / 2 + m.b["meta"]["t0"]
     by_half = {}
     for h, sel in ((1, lambda d: d["t"] < half_t), (2, lambda d: d["t"] >= half_t)):
         ds = [d for d in mine.values() if sel(d)]
+        if not ds:
+            continue
         good = sum(d["verdict"] in GOOD_VERDICTS for d in ds)
         by_half[f"half_{h}"] = {
             "decisions": len(ds),
@@ -257,16 +322,19 @@ def team_report(team: str) -> dict:
             "missed_chances": sum(d["verdict"] in ("missed_progression", "clear_upgrade") for d in ds),
         }
     ranked = []
+    played = (m.cutoff() - m.b["meta"]["t0"]) / m.b["meta"]["duration"]
+    min_decisions = max(4, round(15 * played))
     for p in m.players:
         if p["team"] != ti:
             continue
-        s = m.player_stats.get(str(p["idx"]))
-        if s and s["decisions"] >= 15:
-            ranked.append((s["decision_score"], s["cost"], p["idx"], s["decisions"]))
+        ds = [d for d in mine.values() if d["player"] == p["idx"]]
+        if len(ds) >= min_decisions:
+            ranked.append((m.stats(ds)["good_decisions_pct"], 0, p["idx"], len(ds)))
     ranked.sort(reverse=True)
     fmt = lambda r: {"player": m.who(r[2]), "good_decisions": f"{round(r[0])}%", "decisions": r[3]}  # noqa: E731
     verdicts = Counter(d["verdict"] for d in mine.values())
     return {
+        "status": m.status(),
         "team": m.teams[ti]["name"],
         "formation": m.teams[ti]["formation"],
         "style": m.teams[ti]["style"],
@@ -286,3 +354,78 @@ def compare_players(player_a: str, player_b: str) -> dict:
 
 
 TOOLS = [match_summary, key_moments, get_moment, search_decisions, player_report, team_report, compare_players]
+
+
+# ===================================================================== cards
+# Data for the visual cards shown under AI answers. Agents only choose WHICH card
+# to show; the numbers always come from here.
+
+def card_player(player: str) -> dict:
+    m = load()
+    pi = m.player_index(player)
+    p = m.players[pi]
+    ds = [d for d in m.seen().values() if d["player"] == pi]
+    st = m.stats(ds)
+    v = Counter(d["verdict"] for d in ds)
+    return {
+        "kind": "player",
+        "player": pi,
+        "number": p["number"],
+        "name": p["name"],
+        "position": p["position"],
+        "team": p["team"],
+        "decisions": st["decisions"],
+        "good_decisions": st["good_decisions_pct"],
+        "pass_accuracy": st["pass_accuracy_pct"],
+        "line_breaking": sum(1 for d in ds if d["type"] == "pass" and d["chosen"].get("bypassed", 0) > 0),
+        "mix": {
+            "good": v["optimal"] + v["good"],
+            "missed": v["missed_progression"] + v["clear_upgrade"] + v["should_shoot"] + v["should_pass"],
+            "risky": v["too_risky"] + v["offside"] + v["suboptimal"],
+        },
+    }
+
+
+def card_teams() -> dict:
+    m = load()
+    seen = m.seen()
+    rows = {"xG": [], "Shots": [], "Pass accuracy": [], "Good decisions": [], "Missed chances": []}
+    for k in range(2):
+        ds = [d for d in seen.values() if d["team"] == k]
+        st = m.stats(ds)
+        rows["xG"].append(st["xg"])
+        rows["Shots"].append(st["shots"])
+        rows["Pass accuracy"].append(st["pass_accuracy_pct"] or 0)
+        rows["Good decisions"].append(st["good_decisions_pct"] or 0)
+        rows["Missed chances"].append(sum(d["verdict"] in ("missed_progression", "clear_upgrade") for d in ds))
+    return {
+        "kind": "teams",
+        "score": m.status()["score"],
+        "rows": [{"label": k, "values": v, "pct": k in ("Pass accuracy", "Good decisions"),
+                  "lower_better": k == "Missed chances"} for k, v in rows.items()],
+    }
+
+
+def card_moment(moment_id: int) -> dict:
+    m = load()
+    if moment_id not in m.seen():
+        raise ValueError("Moment not available yet.")
+    d = m.decisions[moment_id]
+
+    def opt(o):
+        return {"receiver": o.get("receiver"), "target": o.get("target"), "p": o.get("p"), "ev": o["ev"],
+                "kind": o["kind"], "style": o.get("style")}
+
+    start = next((e.get("start") for e in m.b["events"] if e["id"] == moment_id), None)
+    return {
+        "kind": "moment",
+        "moment_id": moment_id,
+        "t": d["t"],
+        "player": d["player"],
+        "team": d["team"],
+        "verdict": d["verdict"],
+        "cost": d["cost"],
+        "start": start,
+        "played": opt(d["chosen"]),
+        "better": opt(d["best"]),
+    }

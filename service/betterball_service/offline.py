@@ -33,28 +33,35 @@ def explain(moment_id: int, voice: str = "fan") -> str:
     return first + second + third
 
 
-def ask(question: str) -> str:
-    s = store.match_summary()
-    lines = ["AI answers are offline (no Foundry model connected). Here are the key facts instead:"]
-    for t in s["teams"]:
-        lines.append(
-            f"- {t['team']}: {t['goals']} goals, {t['xg']} xG, {t['good_decisions']} good decisions, "
-            f"{t['missed_chances']} missed chances, {t['clear_upgrades_missed']} clear upgrades missed."
+def ask(question: str, as_of: float | None = None) -> dict:
+    with store.as_of(as_of):
+        s = store.match_summary()
+        lines = ["AI answers are offline (no Foundry model connected). Here are the key facts so far:"]
+        for t in s["teams"]:
+            lines.append(
+                f"- {t['team']}: {t['goals']} goals, {t['xg']} xG, {t['good_decisions'] or '-'} good decisions, "
+                f"{t['missed_chances']} missed chances."
+            )
+        top = store.key_moments(limit=1)
+        if top:
+            lines.append(f"- Biggest missed chance: {top[0]['minute']}' by {top[0]['player'].split(' (')[0]} ({top[0]['goal_chance_missed']}).")
+        return {
+            "text": "\n".join(lines),
+            "cards": [store.card_teams()],
+            "follow_ups": ["Who has missed the most chances?", "Who is the best decision maker?", "What was the biggest missed chance?"],
+        }
+
+
+def coach(team: str, as_of: float | None = None) -> str:
+    with store.as_of(as_of):
+        r = store.team_report(team)
+        best = ", ".join(p["player"].split(" (")[0] + f" ({p['good_decisions']})" for p in r["best_decision_makers"]) or "-"
+        weak = ", ".join(p["player"].split(" (")[0] + f" ({p['good_decisions']})" for p in r["weakest_decision_makers"]) or "-"
+        halves = "; ".join(f"{k.replace('_', ' ')}: {v['good_decisions']} good, {v['missed_chances']} missed chances"
+                           for k, v in r["by_half"].items())
+        return (
+            f"### What worked\n- Best decision makers: {best}.\n\n"
+            f"### Fix next\n- {halves}.\n\n"
+            f"### Player spotlight\n- Most room to improve: {weak}.\n\n"
+            "_Offline template: connect a Foundry model for the AI coach._"
         )
-    top = store.key_moments(limit=1)[0]
-    lines.append(f"- Biggest missed chance: {top['minute']}' by {top['player'].split(' (')[0]} ({top['goal_chance_missed']}).")
-    return "\n".join(lines)
-
-
-def coach(team: str) -> str:
-    r = store.team_report(team)
-    best = ", ".join(p["player"].split(" (")[0] + f" ({p['good_decisions']})" for p in r["best_decision_makers"])
-    weak = ", ".join(p["player"].split(" (")[0] + f" ({p['good_decisions']})" for p in r["weakest_decision_makers"])
-    h1, h2 = r["by_half"]["half_1"], r["by_half"]["half_2"]
-    return (
-        f"### What worked\n- Best decision makers: {best}.\n"
-        f"- Good decisions: {h1['good_decisions']} in the 1st half, {h2['good_decisions']} in the 2nd.\n\n"
-        f"### Fix next\n- Missed chances: {h1['missed_chances']} in the 1st half, {h2['missed_chances']} in the 2nd.\n\n"
-        f"### Player spotlight\n- Most room to improve: {weak}.\n\n"
-        "_Offline template: connect a Foundry model for the AI coach._"
-    )

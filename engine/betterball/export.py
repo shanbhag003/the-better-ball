@@ -22,6 +22,7 @@ def _opt(o: dict | None) -> dict | None:
         "xt": o.get("xt_target"),
         "ev": o["ev"],
         "bypassed": o.get("bypassed", 0),
+        "lofted": bool(o.get("lofted")),
         "beaten": o.get("beaten", []),
         "threat": o.get("threat_defender"),
     }

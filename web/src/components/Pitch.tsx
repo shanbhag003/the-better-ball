@@ -110,23 +110,29 @@ export function Pitch({ match, pb, selected, showBetter }: Props) {
         pill(ctx, ox, Y(W) + 14, "Offside line", OFFSIDE, "#2a0030", 0.95);
       }
 
+      // Labels only on the newest pass, so fading older passes never stack their pills.
+      const labelled = list.length ? list[list.length - 1].d : null;
       for (const { d, alpha, sticky } of list) {
         const better = showBetter && d.cost >= match.meta.good_threshold && d.best;
         const from = d.start;
+        const withLabels = d === labelled && alpha > 0.35;
         if (better) {
           arrow(ctx, X(from[0]), Y(from[1]), X(d.best.target[0]), Y(d.best.target[1]), {
             color: BETTER, alpha, width: sticky ? 3.5 : 2.5, dash: [8, 6], glow: true, offset: -now / 40,
+            lofted: d.best.lofted,
           });
-          const label = d.best.kind === "shot" ? `Shoot · ${pct(d.best.p)}` : `Better · ${pct(d.best.p)}`;
-          const [lx, ly] = beyond(X(from[0]), Y(from[1]), X(d.best.target[0]), Y(d.best.target[1]), 30);
-          pill(ctx, lx, ly, label, BETTER, "#2a0030", alpha);
+          if (withLabels) {
+            const label = d.best.kind === "shot" ? `Shoot · ${pct(d.best.p)}` : `Better · ${pct(d.best.p)}${d.best.lofted ? " · lofted" : ""}`;
+            const [lx, ly] = beyond(X(from[0]), Y(from[1]), X(d.best.target[0]), Y(d.best.target[1]), 30);
+            pill(ctx, lx, ly, label, BETTER, "#2a0030", alpha);
+          }
           if (d.best.receiver !== null) rings.set(d.best.receiver, { color: BETTER, alpha: alpha * (0.6 + 0.4 * pulse) });
         }
         arrow(ctx, X(from[0]), Y(from[1]), X(d.chosen.target[0]), Y(d.chosen.target[1]), {
-          color: PLAYED, alpha: alpha * (sticky ? 0.95 : 0.65), width: sticky ? 3 : 2,
+          color: PLAYED, alpha: alpha * (sticky ? 0.95 : 0.65), width: sticky ? 3 : 2, lofted: d.chosen.lofted,
         });
-        if (sticky || better) {
-          const lbl = d.chosen.kind === "shot" ? `Shot · ${pct(d.chosen.p)}` : `Played · ${pct(d.chosen.p)}`;
+        if (withLabels && (sticky || better)) {
+          const lbl = d.chosen.kind === "shot" ? `Shot · ${pct(d.chosen.p)}` : `Played · ${pct(d.chosen.p)}${d.chosen.lofted ? " · lofted" : ""}`;
           const [lx, ly] = beyond(X(from[0]), Y(from[1]), X(d.chosen.target[0]), Y(d.chosen.target[1]), 30);
           pill(ctx, lx, ly, lbl, "#ffffff", "#1a0020", alpha);
         }
@@ -331,14 +337,34 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 function arrow(
   ctx: CanvasRenderingContext2D,
   x1: number, y1: number, x2: number, y2: number,
-  o: { color: string; alpha: number; width: number; dash?: number[]; glow?: boolean; offset?: number },
+  o: { color: string; alpha: number; width: number; dash?: number[]; glow?: boolean; offset?: number; lofted?: boolean },
 ) {
-  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  // Lofted balls arc through the air: a curve, plus a faint dotted shadow on the grass.
+  const bend = o.lofted ? Math.min(90, len * 0.28) : 0;
+  const nx = -(y2 - y1) / len;
+  const ny = (x2 - x1) / len;
+  const side = ny > 0 ? -1 : 1; // bow towards the top of the screen
+  const cx = (x1 + x2) / 2 + nx * bend * side;
+  const cy = (y1 + y2) / 2 + ny * bend * side;
+  const ang = o.lofted ? Math.atan2(y2 - cy, x2 - cx) : Math.atan2(y2 - y1, x2 - x1);
   const head = 10 + o.width * 1.5;
   const ex = x2 - Math.cos(ang) * head * 0.7;
   const ey = y2 - Math.sin(ang) * head * 0.7;
   ctx.save();
   ctx.globalAlpha = Math.max(0, o.alpha);
+  if (o.lofted) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, o.alpha) * 0.35;
+    ctx.strokeStyle = o.color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([2, 5]);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.strokeStyle = o.color;
   ctx.fillStyle = o.color;
   ctx.lineWidth = o.width;
@@ -351,7 +377,8 @@ function arrow(
   ctx.lineDashOffset = o.offset ?? 0;
   ctx.beginPath();
   ctx.moveTo(x1, y1);
-  ctx.lineTo(ex, ey);
+  if (o.lofted) ctx.quadraticCurveTo(cx, cy, ex, ey);
+  else ctx.lineTo(ex, ey);
   ctx.stroke();
   ctx.setLineDash([]);
   ctx.beginPath();

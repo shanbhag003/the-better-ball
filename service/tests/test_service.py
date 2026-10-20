@@ -57,27 +57,35 @@ def test_agent_flows_run_end_to_end():
     assert "You explain football decisions" in text
 
     answer = asyncio.run(agents.ask("Why did Northbridge lose?", client=client))
-    assert "You explain football decisions" in answer  # the narrator speaks last
+    assert "You explain football decisions" in answer["text"]  # the narrator speaks last
+    assert answer["cards"] == [] and answer["follow_ups"] == []  # plain-text reply degrades gracefully
 
     report = asyncio.run(agents.coach("NBR", client=client))
     assert "head coach" in report.lower()
 
 
-def test_api_offline_mode():
+@pytest.fixture(scope="module")
+def api_client():
+    """One app instance per test run: the MCP session manager can only be started once."""
     from fastapi.testclient import TestClient
 
     from betterball_service.api import app
 
     os.environ.pop("FOUNDRY_PROJECT_ENDPOINT", None)
     with TestClient(app) as c:
-        h = c.get("/api/health").json()
-        assert h["ok"] and h["mode"] == "offline"
-        mid = store.key_moments(limit=1)[0]["moment_id"]
-        r = c.post("/api/explain", json={"moment_id": mid, "voice": "fan"}).json()
-        assert r["mode"] == "offline" and "better ball" in r["text"]
-        assert c.post("/api/ask", json={"question": "Who made the worst decisions?"}).status_code == 200
-        assert "### Fix next" in c.post("/api/coach", json={"team": "NBR"}).json()["text"]
-        assert c.post("/api/explain", json={"moment_id": -5}).status_code == 400
+        yield c
+
+
+def test_api_offline_mode(api_client):
+    c = api_client
+    h = c.get("/api/health").json()
+    assert h["ok"] and h["mode"] == "offline"
+    mid = store.key_moments(limit=1)[0]["moment_id"]
+    r = c.post("/api/explain", json={"moment_id": mid, "voice": "fan"}).json()
+    assert r["mode"] == "offline" and "better ball" in r["text"]
+    assert c.post("/api/ask", json={"question": "Who made the worst decisions?"}).status_code == 200
+    assert "### Fix next" in c.post("/api/coach", json={"team": "NBR"}).json()["text"]
+    assert c.post("/api/explain", json={"moment_id": -5}).status_code == 400
 
 
 def test_rate_limit():
@@ -93,3 +101,24 @@ def test_rate_limit():
     with pytest.raises(HTTPException) as e:
         rl.check(req)
     assert e.value.status_code == 429
+
+
+def test_live_mode_hides_the_future():
+    m = store.load()
+    with store.as_of(600):
+        s = store.match_summary()
+        assert s["status"]["state"].startswith("LIVE")
+        assert all(g["minute"] <= 11 for g in s["goals"])
+        future = next(i for i, d in m.decisions.items() if d["t"] > 1200)
+        with pytest.raises(ValueError):
+            store.get_moment(future)
+        assert all(x["minute"] <= 11 for x in store.search_decisions(limit=25))
+    assert store.match_summary()["status"]["state"] == "full time"
+
+
+def test_api_live_as_of_and_cards(api_client):
+    c = api_client
+    r = c.post("/api/ask", json={"question": "Who is playing better?", "as_of": 1234}).json()
+    assert r["as_of"] == 1200 and r["cards"][0]["kind"] == "teams" and len(r["follow_ups"]) == 3
+    assert c.post("/api/coach", json={"team": "NBR", "as_of": 120}).status_code == 400  # too early
+    assert c.post("/api/coach", json={"team": "NBR", "as_of": 99999}).json()["as_of"] is None  # full time

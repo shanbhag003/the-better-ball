@@ -37,7 +37,8 @@ export interface Option {
   ev: number;
   bypassed: number;
   beaten: number[];
-  offside?: boolean; // defenders this pass takes out of the game
+  offside?: boolean;
+  lofted?: boolean; // ball played through the air
   threat: number | null;
 }
 

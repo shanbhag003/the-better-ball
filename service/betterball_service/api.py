@@ -40,6 +40,7 @@ setup_telemetry()
 log = logging.getLogger("betterball")
 
 Voice = Literal["fan", "analyst"]
+MIN_COACH_SECONDS = 9 * 60  # the report needs some football to talk about
 LANGUAGES = {"English", "Spanish", "French", "Portuguese", "German", "Hindi", "Arabic", "Japanese"}
 
 
@@ -56,7 +57,26 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
-app.mount("/mcp", mcp.streamable_http_app())
+class AsOfFromHeader:
+    """ASGI wrapper: an MCP request carrying x-betterball-as-of runs its tools in live mode."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        value = None
+        if scope["type"] == "http":
+            raw = dict(scope.get("headers") or []).get(agents.AS_OF_HEADER.encode())
+            if raw:
+                try:
+                    value = float(raw.decode())
+                except ValueError:
+                    value = None
+        with store.as_of(value):
+            await self.inner(scope, receive, send)
+
+
+app.mount("/mcp", AsOfFromHeader(mcp.streamable_http_app()))
 
 # Same inputs give the same answer: cache to keep latency and model cost down.
 _cache: dict[tuple, dict] = {}
@@ -96,13 +116,15 @@ async def _run(key: tuple, online, fallback) -> dict:
     started = time.perf_counter()
     meta = _mode()
     try:
-        text = await _online(online, meta) if meta["mode"] == "foundry" else fallback()
+        result = await _online(online, meta) if meta["mode"] == "foundry" else fallback()
     except ValueError as e:  # bad player / team / moment in the request
         raise HTTPException(400, str(e)) from e
     except Exception as e:  # noqa: BLE001 - surface model/network failures to the UI
         log.exception("agent call failed")
         raise HTTPException(502, f"The AI service failed: {type(e).__name__}") from e
-    out = {"text": text.strip(), **meta, "ms": round((time.perf_counter() - started) * 1000)}
+    body = result if isinstance(result, dict) else {"text": result}
+    body["text"] = body["text"].strip()
+    out = {**body, **meta, "ms": round((time.perf_counter() - started) * 1000)}
     _cache[key] = out
     return out
 
@@ -117,12 +139,28 @@ class AskIn(BaseModel):
     question: str = Field(min_length=3, max_length=300)
     voice: Voice = "fan"
     language: str = "English"
+    as_of: float | None = Field(default=None, description="Live mode: match seconds; omit for the full match")
 
 
 class CoachIn(BaseModel):
     team: str
     voice: Voice = "analyst"
     language: str = "English"
+    as_of: float | None = Field(default=None, description="Live mode: match seconds; omit for the full match")
+
+
+def _as_of(value: float | None) -> float | None:
+    """Snap to the whole minute (stable caching, honest 'as of' labels); None once the match is over."""
+    if value is None:
+        return None
+    m = store.load()
+    if value >= m.end:
+        return None
+    return float(int(value // 60) * 60)
+
+
+def _with_as_of(as_of: float | None, out: dict) -> dict:
+    return {**out, "as_of": as_of}
 
 
 @app.get("/")
@@ -155,18 +193,22 @@ async def explain(body: ExplainIn) -> dict:
 @app.post("/api/ask", dependencies=[Depends(rate_limited)])
 async def ask(body: AskIn) -> dict:
     lang = _language(body.language)
-    return await _run(
-        ("ask", body.question.strip().lower(), body.voice, lang),
-        lambda client: agents.ask(body.question, body.voice, lang, client=client),
-        lambda: offline.ask(body.question),
-    )
+    t = _as_of(body.as_of)
+    return _with_as_of(t, await _run(
+        ("ask", body.question.strip().lower(), body.voice, lang, t),
+        lambda client: agents.ask(body.question, body.voice, lang, client=client, as_of=t),
+        lambda: offline.ask(body.question, as_of=t),
+    ))
 
 
 @app.post("/api/coach", dependencies=[Depends(rate_limited)])
 async def coach(body: CoachIn) -> dict:
     lang = _language(body.language)
-    return await _run(
-        ("coach", body.team.lower(), body.voice, lang),
-        lambda client: agents.coach(body.team, body.voice, lang, client=client),
-        lambda: offline.coach(body.team),
-    )
+    t = _as_of(body.as_of)
+    if t is not None and t < MIN_COACH_SECONDS:
+        raise HTTPException(400, "Too early for a coach report: let the game develop (from 10').")
+    return _with_as_of(t, await _run(
+        ("coach", body.team.lower(), body.voice, lang, t),
+        lambda client: agents.coach(body.team, body.voice, lang, client=client, as_of=t),
+        lambda: offline.coach(body.team, as_of=t),
+    ))

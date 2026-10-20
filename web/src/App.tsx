@@ -9,6 +9,7 @@ import { Sidebar } from "./components/Sidebar";
 import { clock, loadMatch, scoreAt } from "./data";
 import { useAiPrefs } from "./aiPrefs";
 import { AiBadge } from "./components/Ai";
+import { cutoffFor, LiveContext, seen } from "./live";
 import { Playback, usePlayback } from "./playback";
 import type { Decision, Match } from "./types";
 
@@ -66,7 +67,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
   const [tourIdx, setTourIdx] = useState(0);
   const pending = useRef<Decision | null>(null);
 
-  const moments = useMemo(() => {
+  const allMoments = useMemo(() => {
     if (playerFilter !== null) {
       // A player's own biggest missed chances.
       return match.decisions
@@ -78,18 +79,28 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
     return match.keyMoments.filter((d) => teamFilter === null || d.team === teamFilter);
   }, [match, teamFilter, playerFilter]);
 
+  // Live mode starts once the tour is over (or skipped); the tour previews the full match.
+  const touring = onboarding || coach || tourOn;
+  const asOf = cutoffFor(match, pb.t, !touring);
+  const minuteKey = asOf === null ? -1 : asOf;
+  const moments = useMemo(
+    () => allMoments.filter((d) => seen(d.t, asOf)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allMoments, minuteKey],
+  );
+
   const goTo = useCallback(
     (d: Decision) => {
       setStarted(true);
       setSelected(null);
-      setTourIdx(Math.max(0, moments.indexOf(d)));
+      setTourIdx(Math.max(0, allMoments.indexOf(d)));
       pending.current = d;
       pb.pause();
       pb.setSpeed(1);
       pb.seek(d.t - LEAD_IN);
       pb.play();
     },
-    [pb, moments],
+    [pb, allMoments],
   );
 
   const startTour = useCallback(() => {
@@ -104,17 +115,17 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
       const p = pending.current;
       if (p && from < p.t && to >= p.t) return p.t;
       if (autoStop) {
-        const hit = moments.find((d) => from < d.t && to >= d.t);
+        const hit = allMoments.find((d) => from < d.t && to >= d.t);
         if (hit) return hit.t;
       }
       return null;
     };
     pb.onStop = (t) => {
-      const d = pending.current && Math.abs(pending.current.t - t) < 1e-6 ? pending.current : moments.find((m) => m.t === t) ?? null;
+      const d = pending.current && Math.abs(pending.current.t - t) < 1e-6 ? pending.current : allMoments.find((m) => m.t === t) ?? null;
       pending.current = null;
       setSelected(d);
     };
-  }, [pb, moments, autoStop]);
+  }, [pb, allMoments, autoStop]);
 
   // Drop the card once playback moves on.
   useEffect(() => {
@@ -123,8 +134,8 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
 
   const nextMoment = useMemo(() => {
     const ref = selected?.t ?? pb.t;
-    return moments.find((d) => d.t > ref + 0.01) ?? null;
-  }, [moments, selected, pb.t]);
+    return allMoments.find((d) => d.t > ref + 0.01) ?? null;
+  }, [allMoments, selected, pb.t]);
 
   // Keyboard shortcuts.
   useEffect(() => {
@@ -144,7 +155,20 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
 
   const showCard = selected && !pb.playing && Math.abs(pb.t - selected.t) < 0.3;
 
+  const live = useMemo(
+    () => ({
+      asOf,
+      watch: (id: number) => {
+        const d = match.byId.get(id);
+        if (d) goTo(d);
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [minuteKey, goTo, match],
+  );
+
   return (
+    <LiveContext.Provider value={live}>
     <div className="app">
       <Header match={match} pb={pb} onHelp={() => setOnboarding(true)} />
 
@@ -154,6 +178,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
             <div className="pitch-legend">
               <span><i className="line played" /> Played</span>
               <span><i className="line better" /> Better option</span>
+              <span><i className="arc" /> Lofted</span>
               {showCard && (selected!.chosen.beaten?.length || selected!.best.beaten?.length) ? (
                 <span><i className="ring" /> Defender beaten</span>
               ) : null}
@@ -177,7 +202,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
                 d={selected!}
                 onReplay={() => goTo(selected!)}
                 onNext={nextMoment ? () => goTo(nextMoment) : null}
-                nextLabel={tourOn ? `Next · ${tourIdx + 2}/${moments.length}` : "Next moment"}
+                nextLabel={tourOn ? `Next · ${tourIdx + 2}/${allMoments.length}` : "Next moment"}
                 onFinish={tourOn ? () => { setTourOn(false); setSelected(null); } : null}
                 onClose={() => setSelected(null)}
               />
@@ -186,8 +211,8 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
             {tourOn && (
               <div className="tour-banner pop">
                 <span className="tb-label">Guided tour</span>
-                <span className="tb-count"><b>{tourIdx + 1}</b> / {moments.length}</span>
-                <span className="tb-bar"><span style={{ width: `${((tourIdx + 1) / Math.max(1, moments.length)) * 100}%` }} /></span>
+                <span className="tb-count"><b>{tourIdx + 1}</b> / {allMoments.length}</span>
+                <span className="tb-bar"><span style={{ width: `${((tourIdx + 1) / Math.max(1, allMoments.length)) * 100}%` }} /></span>
                 <button className="icon-btn sm" onClick={() => setTourOn(false)} aria-label="Exit tour"><X size={15} /></button>
               </div>
             )}
@@ -210,6 +235,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
           activeId={selected?.id ?? null}
           onMoment={goTo}
           onTour={startTour}
+          totalMoments={allMoments.length}
           playerFilter={playerFilter}
           setPlayerFilter={setPlayerFilter}
           teamFilter={teamFilter}
@@ -233,11 +259,12 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
           onFinish={() => {
             setCoach(false);
             setTourOn(true);
-            if (moments[0]) goTo(moments[0]);
+            if (allMoments[0]) goTo(allMoments[0]);
           }}
         />
       )}
     </div>
+    </LiveContext.Provider>
   );
 }
 

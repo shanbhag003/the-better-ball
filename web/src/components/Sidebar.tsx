@@ -1,6 +1,7 @@
 import { CircleHelp, ClipboardList, MessageCircle, Play, Sparkles, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GUIDE, goalPct, minute, VERDICT } from "../labels";
+import { asOfLabel, liveStats, useLive } from "../live";
 import type { Decision, Match } from "../types";
 import { AskPanel } from "./AskPanel";
 import { CoachPanel } from "./CoachReport";
@@ -11,6 +12,7 @@ interface Props {
   activeId: number | null;
   onMoment: (d: Decision) => void;
   onTour: () => void;
+  totalMoments: number;
   playerFilter: number | null;
   setPlayerFilter: (p: number | null) => void;
   teamFilter: number | null;
@@ -43,14 +45,15 @@ export function Sidebar(props: Props) {
   );
 }
 
-function Moments({ match, moments, activeId, onMoment, onTour, playerFilter, setPlayerFilter, teamFilter, setTeamFilter }: Props) {
+function Moments({ match, moments, activeId, onMoment, onTour, totalMoments, playerFilter, setPlayerFilter, teamFilter, setTeamFilter }: Props) {
   const fp = playerFilter !== null ? match.players[playerFilter] : null;
   const [guide, setGuide] = useState(false);
+  const { asOf } = useLive();
   return (
     <div className="panel">
-      <button className="btn primary wide" onClick={onTour} disabled={!moments.length}>
+      <button className="btn primary wide" onClick={onTour} disabled={!totalMoments}>
         <Play size={15} fill="currentColor" /> Guided tour
-        <span className="sub">{moments.length} moments</span>
+        <span className="sub">full-match preview</span>
       </button>
 
       <div className="filters">
@@ -86,7 +89,12 @@ function Moments({ match, moments, activeId, onMoment, onTour, playerFilter, set
       )}
 
       <div className="list">
-        {moments.length === 0 && <div className="empty">No missed chances here 👏</div>}
+        {asOf !== null && (
+          <div className="live-note"><span className="live-dot" /> Live · {moments.length} so far, {asOfLabel(asOf)}</div>
+        )}
+        {moments.length === 0 && (
+          <div className="empty">{asOf !== null ? "No key moments yet. They appear here as the match unfolds." : "No missed chances here 👏"}</div>
+        )}
         {moments.map((d) => {
           const p = match.players[d.player];
           const v = VERDICT[d.verdict];
@@ -111,16 +119,19 @@ function Moments({ match, moments, activeId, onMoment, onTour, playerFilter, set
 
 function Players({ match, onPick }: Props & { onPick: (p: number) => void }) {
   const [team, setTeam] = useState(0);
+  const { asOf } = useLive();
+  const { teamStats, playerStats } = useMemo(() => liveStats(match, asOf), [match, asOf]);
+  const minDecisions = asOf === null ? 5 : 3;
   const rows = useMemo(
     () =>
       match.players
         .filter((p) => p.team === team)
-        .map((p) => ({ p, s: match.playerStats[String(p.idx)] }))
-        .filter((r) => r.s && r.s.decisions >= 5)
+        .map((p) => ({ p, s: playerStats[String(p.idx)] }))
+        .filter((r) => r.s && r.s.decisions >= minDecisions)
         .sort((a, b) => b.s.decision_score - a.s.decision_score),
-    [match, team],
+    [match, team, playerStats, minDecisions],
   );
-  const ts = match.teamStats[String(team)];
+  const ts = teamStats[String(team)];
   return (
     <div className="panel">
       <div className="segmented full">
@@ -130,6 +141,7 @@ function Players({ match, onPick }: Props & { onPick: (p: number) => void }) {
           </button>
         ))}
       </div>
+      {asOf !== null && <div className="live-note"><span className="live-dot" /> Live stats, {asOfLabel(asOf)}</div>}
       {ts && (
         <div className="stat-strip">
           <Stat label="Good decisions" value={`${Math.round(ts.decision_score)}%`} hint="Passes & shots close to the best option" />
@@ -143,6 +155,7 @@ function Players({ match, onPick }: Props & { onPick: (p: number) => void }) {
           <span className="verdict sm good">Good</span> choice.
         </p>
         <div className="list-head muted small"><span>Player</span><span>Good decisions</span></div>
+        {rows.length === 0 && <div className="empty small">Too early: players appear after a few decisions.</div>}
         {rows.map(({ p, s }) => (
           <button key={p.idx} className="player-row" onClick={() => onPick(p.idx)} title="See this player's key moments">
             <span className="num" style={{ background: match.teams[p.team].color }}>{p.number}</span>
