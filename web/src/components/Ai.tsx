@@ -26,9 +26,11 @@ export function AiOptions({ voice, setVoice, language, setLanguage }: {
 }
 
 /** Small badge saying who wrote the text: a Foundry model, or the offline template. */
-export function AiBadge({ a }: { a: Pick<AiAnswer, "mode" | "model"> }) {
+export function AiBadge({ a }: { a: Pick<AiAnswer, "mode" | "model"> & { fallback?: boolean } }) {
   return a.mode === "foundry" ? (
-    <span className="ai-badge on" title="Written by Microsoft Foundry agents"><Sparkles size={11} /> Foundry · {a.model}</span>
+    <span className="ai-badge on" title={a.fallback ? "Primary model unavailable: answered by the backup deployment" : "Written by Microsoft Foundry agents"}>
+      <Sparkles size={11} /> Foundry · {a.model}{a.fallback ? " (backup)" : ""}
+    </span>
   ) : (
     <span className="ai-badge" title="No Foundry model connected: template text"><Bot size={11} /> Offline template</span>
   );

@@ -8,7 +8,7 @@ Agents
 
 Orchestrations
   * explain(moment)  : Narrator alone, fed the moment's facts (fast, cheap, deterministic grounding).
-  * ask(question)    : Sequential  Analyst -> Narrator.
+  * ask(question)    : Analyst (MCP tools) -> Narrator, explicit hand-off of written findings.
   * coach(team)      : Concurrent  [Attack coach, Ball-security coach] -> Head coach.
 """
 
@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from agent_framework import Agent, MCPStreamableHTTPTool, tool
-from agent_framework.orchestrations import ConcurrentBuilder, SequentialBuilder
+from agent_framework.orchestrations import ConcurrentBuilder
 
 from . import store
 
@@ -206,11 +206,22 @@ async def explain(moment_id: int, voice: str = "fan", language: str = "English",
 
 
 async def ask(question: str, voice: str = "fan", language: str = "English", client=None) -> str:
+    """Analyst gathers evidence with the MCP tools, then the Narrator answers for the audience.
+
+    The hand-off is explicit: the Narrator receives the question and the Analyst's written findings
+    only, never the raw tool-call history (some reasoning models echo that instead of answering).
+    """
     client = client or make_client()
     async with match_tools() as tools:
-        workflow = SequentialBuilder(participants=[analyst(client, tools), narrator(client, voice, language)]).build()
-        result = await workflow.run(question)
-        return _last_text(result.get_outputs())
+        findings = _text(await analyst(client, tools).run(question))
+    if not findings:
+        raise RuntimeError("The analyst returned no findings")
+    prompt = (
+        f"Question from the user: {question}\n\n"
+        f"Findings from the Analyst (all numbers come from the match tools):\n{findings}\n\n"
+        "Answer the question directly, first sentence first. Use only these findings."
+    )
+    return _text(await narrator(client, voice, language).run(prompt))
 
 
 async def coach(team: str, voice: str = "analyst", language: str = "English", client=None) -> str:

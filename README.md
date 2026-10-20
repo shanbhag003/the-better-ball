@@ -84,6 +84,7 @@ A React app that replays the match on an animated 2D pitch:
 | **Attack coach ‖ Ball-security coach → Head coach** (concurrent workflow) | **AI coach report**: two specialists review the team in parallel; the head coach merges their notes into *What worked / Fix next / Player spotlight*. |
 
 **Grounding:** agents may only use numbers returned by the tools; the prompts forbid inventing players, minutes or stats.
+**Resilience:** if the primary deployment (gpt-4.1-mini) fails or is rate-limited, the API retries on a backup deployment (gpt-5-mini) and the UI badge says so. Tool calls are capped (12 calls, 90 s) so an agent can't loop.
 **Offline mode:** without a Foundry model configured, the API returns clearly labelled template text, so the app still works.
 
 ---

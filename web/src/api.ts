@@ -6,6 +6,7 @@ export interface AiAnswer {
   model: string | null;
   ms: number;
   cached?: boolean;
+  fallback?: boolean; // answered by the backup deployment
 }
 
 export interface AiHealth {
