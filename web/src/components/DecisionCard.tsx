@@ -63,11 +63,11 @@ function OptionBox({ match, label, o, outcome, tone }: { match: Match; label: st
       <div className="opt-label">
         <span className={`line ${tone}`} /> {label}
         {outcome && <span className={`outcome ${outcome}`}>{OUTCOME[outcome] ?? outcome}</span>}
+        {!outcome && o.style === "space" && <span className="outcome space">Into space</span>}
       </div>
       <div className="opt-target">
         <ArrowRight size={14} />
         {r ? <><b>#{r.number}</b> {r.name.split(" ")[1]}</> : <b>{o.style === "header" ? "Header" : "Shot"}</b>}
-        {o.style === "space" && <span className="tag space">into space</span>}
       </div>
       <Metric name="Arrives" hint={o.kind === "shot" ? "Chance the shot scores" : "Chance the pass reaches the receiver"} value={pct(o.p)} />
       <Metric name="Goal chance" hint="Chance this move ends in a goal" value={goalPct(o.ev)} strong />

@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { GUIDE, goalPct, minute, VERDICT } from "../labels";
 import type { Decision, Match } from "../types";
 import { AskPanel } from "./AskPanel";
-import { CoachReport } from "./CoachReport";
+import { CoachPanel } from "./CoachReport";
 
 interface Props {
   match: Match;
@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function Sidebar(props: Props) {
-  const [tab, setTab] = useState<"moments" | "players" | "ask">("moments");
+  const [tab, setTab] = useState<"moments" | "players" | "coach" | "ask">("moments");
   return (
     <aside className="sidebar card">
       <div className="tabs" role="tablist">
@@ -28,12 +28,16 @@ export function Sidebar(props: Props) {
         <button role="tab" aria-selected={tab === "players"} className={tab === "players" ? "on" : ""} onClick={() => setTab("players")}>
           <Users size={15} /> Players
         </button>
+        <button role="tab" aria-selected={tab === "coach"} className={`coach-tab ${tab === "coach" ? "on" : ""}`} onClick={() => setTab("coach")}>
+          <ClipboardList size={15} /> Coach
+        </button>
         <button role="tab" aria-selected={tab === "ask"} className={`ask-tab ${tab === "ask" ? "on" : ""}`} onClick={() => setTab("ask")}>
           <MessageCircle size={15} /> Ask AI
         </button>
       </div>
       {tab === "moments" && <Moments {...props} />}
       {tab === "players" && <Players {...props} onPick={(p) => { props.setPlayerFilter(p); setTab("moments"); }} />}
+      {tab === "coach" && <CoachPanel match={props.match} />}
       {tab === "ask" && <AskPanel match={props.match} />}
     </aside>
   );
@@ -107,7 +111,6 @@ function Moments({ match, moments, activeId, onMoment, onTour, playerFilter, set
 
 function Players({ match, onPick }: Props & { onPick: (p: number) => void }) {
   const [team, setTeam] = useState(0);
-  const [report, setReport] = useState(false);
   const rows = useMemo(
     () =>
       match.players
@@ -118,7 +121,6 @@ function Players({ match, onPick }: Props & { onPick: (p: number) => void }) {
     [match, team],
   );
   const ts = match.teamStats[String(team)];
-  if (report) return <div className="panel"><CoachReport team={match.teams[team]} onBack={() => setReport(false)} /></div>;
   return (
     <div className="panel">
       <div className="segmented full">
@@ -136,9 +138,6 @@ function Players({ match, onPick }: Props & { onPick: (p: number) => void }) {
         </div>
       )}
       <div className="list">
-        <button className="btn ai wide-ai" onClick={() => setReport(true)}>
-          <ClipboardList size={15} /> AI coach report · {match.teams[team].short}
-        </button>
         <p className="explain muted small">
           <b>Good decisions</b> = share of passes and shots rated <span className="verdict sm good">Best</span> or{" "}
           <span className="verdict sm good">Good</span> choice.

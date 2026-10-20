@@ -1,44 +1,76 @@
-import { ChevronLeft, ClipboardList } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ClipboardList, Shield, Swords } from "lucide-react";
+import { useState } from "react";
 import { ai, type AiAnswer } from "../api";
 import { useAiPrefs } from "../aiPrefs";
-import type { Team } from "../types";
+import type { Match } from "../types";
 import { AiBadge, AiOptions, Markdown, Thinking } from "./Ai";
 
-/** Head coach report: two specialist agents review in parallel, the head coach merges them. */
-export function CoachReport({ team, onBack }: { team: Team; onBack: () => void }) {
+/** Coach tab: two specialist agents review a team in parallel, the head coach merges their notes. */
+export function CoachPanel({ match }: { match: Match }) {
   const prefs = useAiPrefs();
+  const [team, setTeam] = useState(0);
   const [answer, setAnswer] = useState<AiAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const t = match.teams[team];
 
-  useEffect(() => {
-    let live = true;
+  const pick = (k: number) => {
+    setTeam(k);
     setAnswer(null);
     setError(null);
-    ai.coach(team.short, prefs.voice, prefs.language)
-      .then((a) => live && setAnswer(a))
-      .catch((e) => live && setError((e as Error).message));
-    return () => { live = false; };
-  }, [team.short, prefs.voice, prefs.language]);
+  };
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    setAnswer(null);
+    try {
+      setAnswer(await ai.coach(t.short, prefs.voice, prefs.language));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <div className="coach-report">
-      <div className="cr-head">
-        <button className="icon-btn sm" onClick={onBack} aria-label="Back to players"><ChevronLeft size={16} /></button>
-        <ClipboardList size={16} />
-        <b>Coach report</b>
-        <span className="dot" style={{ background: team.color }} />
-        <span className="muted small">{team.name}</span>
+    <div className="panel coach-panel">
+      <div className="segmented full">
+        {match.teams.map((x) => (
+          <button key={x.idx} className={team === x.idx ? "on" : ""} onClick={() => pick(x.idx)}>
+            <span className="dot" style={{ background: x.color }} /> {x.name}
+          </button>
+        ))}
       </div>
-      <AiOptions {...prefs} />
+
+      <div className="crew">
+        <span className="crew-step"><Swords size={14} /> Attack coach</span>
+        <span className="crew-plus">+</span>
+        <span className="crew-step"><Shield size={14} /> Security coach</span>
+        <span className="crew-arrow">→</span>
+        <span className="crew-step lead"><ClipboardList size={14} /> Head coach</span>
+      </div>
+
+      <div className="eb-row">
+        <AiOptions {...prefs} />
+        <button className="btn ai" onClick={run} disabled={busy || prefs.health === null}>
+          <ClipboardList size={14} /> {answer ? "Rewrite" : "Write report"}
+        </button>
+      </div>
+
       <div className="cr-body">
-        {!answer && !error && <Thinking label="Attack and ball-security coaches are reviewing in parallel…" />}
+        {!answer && !busy && !error && (
+          <div className="empty small muted">
+            {prefs.health === null ? "AI service not reachable." : `Full-match report for ${t.name}: what worked, what to fix, who stood out.`}
+          </div>
+        )}
+        {busy && <Thinking label="Two coaches are reviewing in parallel…" />}
         {error && <div className="eb-text error">⚠️ {error}</div>}
         {answer && (
-          <>
+          <div className="pop">
             <Markdown text={answer.text} />
             <AiBadge a={answer} />
-          </>
+          </div>
         )}
       </div>
     </div>

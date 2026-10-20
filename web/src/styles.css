@@ -466,9 +466,15 @@ select.lang option { background: var(--purple-deep); }
   color: var(--purple); background: linear-gradient(135deg, var(--cyan), var(--better));
 }
 .ask-input .send:disabled { opacity: 0.4; }
-.tabs button { font-size: 12.5px; gap: 5px; }
+.tabs button { font-size: 12px; gap: 4px; padding: 0 2px; }
 
+.coach-panel .cr-body { flex: 1; }
+.crew { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11.5px; font-weight: 600; flex: none; }
+.crew-step { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
+.crew-step.lead { color: var(--better); border-color: rgba(0,255,133,0.35); }
+.crew-plus, .crew-arrow { color: var(--muted); }
 .coach-report { display: flex; flex-direction: column; gap: 10px; min-height: 0; flex: 1; }
 .cr-head { display: flex; align-items: center; gap: 8px; flex: none; }
 .cr-body { overflow-y: auto; min-height: 0; flex: 1; display: grid; align-content: start; gap: 8px; padding-right: 4px; }
-.tag.space { margin-left: 4px; color: var(--cyan); background: rgba(4,245,255,0.1); }
+.outcome { white-space: nowrap; }
+.outcome.space { color: var(--cyan); background: rgba(4,245,255,0.12); }
