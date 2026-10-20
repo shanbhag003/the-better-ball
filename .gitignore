@@ -13,3 +13,4 @@ data/*.json
 !data/README.md
 .DS_Store
 web/dist/
+service/.env

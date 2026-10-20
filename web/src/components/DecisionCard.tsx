@@ -1,6 +1,7 @@
 import { ArrowRight, Check, ChevronRight, Info, RotateCcw, X } from "lucide-react";
 import { explain, goalPct, minute, pct, VERDICT } from "../labels";
 import type { Decision, Match, Option } from "../types";
+import { ExplainBox } from "./ExplainBox";
 
 interface Props {
   match: Match;
@@ -44,6 +45,8 @@ export function DecisionCard({ match, d, onReplay, onNext, nextLabel, onFinish, 
         </div>
       )}
 
+      <ExplainBox key={d.id} momentId={d.id} />
+
       <div className="dc-actions">
         <button className="btn ghost" onClick={onReplay}><RotateCcw size={15} /> Replay</button>
         {onNext && <button className="btn primary" onClick={onNext}>{nextLabel} <ChevronRight size={16} /></button>}
@@ -64,6 +67,7 @@ function OptionBox({ match, label, o, outcome, tone }: { match: Match; label: st
       <div className="opt-target">
         <ArrowRight size={14} />
         {r ? <><b>#{r.number}</b> {r.name.split(" ")[1]}</> : <b>{o.style === "header" ? "Header" : "Shot"}</b>}
+        {o.style === "space" && <span className="tag space">into space</span>}
       </div>
       <Metric name="Arrives" hint={o.kind === "shot" ? "Chance the shot scores" : "Chance the pass reaches the receiver"} value={pct(o.p)} />
       <Metric name="Goal chance" hint="Chance this move ends in a goal" value={goalPct(o.ev)} strong />

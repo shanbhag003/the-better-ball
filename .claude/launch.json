@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "web", "run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "betterball_service.api:app", "--app-dir", "service", "--port", "8000"],
+      "port": 8000
     }
   ]
 }

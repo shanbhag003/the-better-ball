@@ -5,8 +5,8 @@
 The Better Ball replays a (synthetic) football match and checks every on-ball decision.
 For each pass it computes the probability that each available option would succeed and the
 threat it would create, then compares the option the player chose with the best one available.
-Next, AI agents built on Microsoft Foundry will turn those numbers into plain-language explanations:
-tactical detail for coaches and analysts, and a simple story for fans.
+AI agents built with Microsoft Agent Framework on Microsoft Foundry turn those numbers into plain-language
+explanations: tactical detail for coaches and analysts, a simple story for fans, in several languages.
 
 Built for the [Microsoft × Premier League "Inside the Game" Hackathon](https://github.com/microsoft/insidethegamehackathon).
 
@@ -24,7 +24,7 @@ Built for the [Microsoft × Premier League "Inside the Game" Hackathon](https://
                                                   └───────────┬─────────────┘
                                                               │ decisions.json
                                     ┌─────────────────────────▼─────────────────────────┐
-                                    │ AI agent layer (planned): Microsoft Foundry        │
+                                    │ AI agents: Microsoft Foundry + Agent Framework     │
                                     │  Tactical Analyst · Narrator · Coach · Q&A         │
                                     └─────────────────────────┬─────────────────────────┘
                                                               │
@@ -76,12 +76,15 @@ A React app that replays the match on an animated 2D pitch:
 | **Machine-learned pass model** | The pass model's physical parameters are *learned* from about 5,000 simulated passes by minimising log-loss (`calibrate.py`), then validated on held-out passes. Brier score 0.138 vs 0.160 for a constant baseline. |
 | **Decision intelligence** | An algorithmic search over every option at every pass (expected value, threat, interception risk). This is analytics, not generative AI. |
 
-| Next (planned, Microsoft Foundry + Agent Framework) | What it does |
+| AI agents (Microsoft Foundry + Agent Framework, `service/`) | What it does |
 |---|---|
-| **Tactical Analyst agent** | Calls the decision engine as tools through an MCP server (key moments, option scores, player reports) and picks out the patterns behind a result. |
-| **Narrator agent** | Turns each moment's numbers into a short explanation, in *analyst* or *fan* voice and in several languages. |
-| **Coach agent** | Writes half-time and full-time decision reports per player and per team. |
-| **Ask the match (Q&A)** | Answers questions like "Why did Northbridge lose?" or "Show me #8's riskiest passes", grounded in the engine's data. |
+| **MCP server** (`mcp_server.py`) | Exposes the decision engine as 7 tools (`match_summary`, `key_moments`, `get_moment`, `search_decisions`, `player_report`, `team_report`, `compare_players`) over streamable HTTP at `/mcp`. Any MCP client can use it, including the agents below and VS Code. |
+| **Narrator agent** | **Explain** button on each decision card: turns the moment's facts into 3–4 sentences in *fan* or *analyst* voice, in 8 languages. |
+| **Analyst → Narrator** (sequential workflow) | **Ask AI** tab: the Analyst calls the MCP tools to gather evidence, then the Narrator answers for the chosen audience. |
+| **Attack coach ‖ Ball-security coach → Head coach** (concurrent workflow) | **AI coach report**: two specialists review the team in parallel; the head coach merges their notes into *What worked / Fix next / Player spotlight*. |
+
+**Grounding:** agents may only use numbers returned by the tools; the prompts forbid inventing players, minutes or stats.
+**Offline mode:** without a Foundry model configured, the API returns clearly labelled template text, so the app still works.
 
 ---
 
@@ -99,6 +102,11 @@ python -m betterball.analysis.calibrate ../data/match_7.json ../data/match_11.js
 
 pytest
 
+# AI service: API + MCP server + agents (offline mode until Foundry is configured)
+cd ../service && python -m venv .venv && .venv/Scripts/pip install -r requirements.txt
+cp .env.example .env        # add FOUNDRY_PROJECT_ENDPOINT and FOUNDRY_MODEL, then: az login
+.venv/Scripts/uvicorn betterball_service.api:app --port 8000
+
 # export a replay bundle and run the web app
 python -m betterball.cli export ../data/match_7.json ../data/analysis_7.json --out ../web/public/data/match_7.json
 cd ../web && npm install && npm run dev
@@ -112,7 +120,7 @@ Outputs:
 ```
 engine/      Python: synthetic match engine + decision analysis
 web/         React + Vite pitch replay (canvas)
-agents/      Foundry agents (planned)
+service/     FastAPI + MCP server + Foundry agents (Agent Framework)
 data/        Generated matches (git-ignored)
 ```
 

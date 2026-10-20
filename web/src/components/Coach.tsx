@@ -12,6 +12,7 @@ const STEPS: Step[] = [
   { sel: ".timeline", title: "Find the moments", text: "Amber ticks are key moments. Click one to jump there." },
   { sel: ".sidebar .list", title: "Biggest missed chances", text: "Every card is a moment. Click to replay it." },
   { sel: ".toggles", title: "Your controls", text: "Hide the better passes or stop auto-pausing." },
+  { sel: ".ask-tab", title: "Ask the AI", text: "Microsoft Foundry agents answer questions about the match, for fans or analysts." },
   { sel: ".pitch-card", title: "Let's watch one", text: "We play the build-up, pause on the pass, then explain it." },
 ];
 

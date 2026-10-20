@@ -7,6 +7,8 @@ import { Onboarding } from "./components/Onboarding";
 import { Pitch } from "./components/Pitch";
 import { Sidebar } from "./components/Sidebar";
 import { clock, loadMatch, scoreAt } from "./data";
+import { useAiPrefs } from "./aiPrefs";
+import { AiBadge } from "./components/Ai";
 import { Playback, usePlayback } from "./playback";
 import type { Decision, Match } from "./types";
 
@@ -266,9 +268,18 @@ function Header({ match, pb, onHelp }: { match: Match; pb: Playback; onHelp: () 
         <span className="clock">{c.label} <span className="muted">· {c.half}</span></span>
       </div>
 
+      <div className="head-right">
+      <AiStatus />
       <button className="btn ghost help" onClick={onHelp}>
         <CircleHelp size={16} /> <span>How it works</span>
       </button>
+      </div>
     </header>
   );
+}
+
+function AiStatus() {
+  const { health } = useAiPrefs();
+  if (!health) return <span className="ai-badge off" title="Start the API service to enable AI features">AI offline</span>;
+  return <AiBadge a={health} />;
 }
