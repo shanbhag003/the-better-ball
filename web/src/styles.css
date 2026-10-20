@@ -318,7 +318,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .onboard h2 { margin: 14px 0 6px; font-size: 24px; letter-spacing: -0.02em; }
 .onboard p { margin: 0 0 18px; font-size: 15px; }
 .ob-icon { display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: var(--better); color: var(--purple); box-shadow: 0 0 30px rgba(0,255,133,0.35); margin-top: 8px; }
-.ob-visual { height: 90px; display: flex; align-items: center; justify-content: center; gap: 14px; border-radius: 14px; background: linear-gradient(180deg, #14532d, #0f3f24); }
+.ob-visual { height: 90px; display: flex; align-items: center; justify-content: center; gap: 14px; border-radius: 14px; background: linear-gradient(180deg, #3a0742, #2c0032); border: 1px solid rgba(4,245,255,0.25); }
 .ob-visual.dots span { width: 22px; height: 22px; border-radius: 50%; animation: drift 2.4s ease-in-out infinite; }
 .ob-visual.dots span:nth-child(2) { animation-delay: -0.8s; }
 .ob-visual.dots .ball { width: 10px; height: 10px; background: #fff; box-shadow: 0 0 10px #fff; animation-delay: -1.6s; }
@@ -520,8 +520,8 @@ select.lang option { background: var(--purple-deep); }
 .vs-bar.left { justify-content: flex-end; }
 .vs-bar span { display: block; height: 100%; border-radius: 3px; }
 .mini-pitch { width: 100%; height: auto; display: block; }
-.mp-grass { fill: #0f3f24; }
-.mp-lines rect, .mp-lines line, .mp-lines circle { fill: none; stroke: rgba(255,255,255,0.4); stroke-width: 0.5; }
+.mp-grass { fill: #2c0032; }
+.mp-lines rect, .mp-lines line, .mp-lines circle { fill: none; stroke: rgba(4,245,255,0.45); stroke-width: 0.5; }
 .mp-played { stroke: #fff; stroke-width: 1.1; }
 .mp-better { stroke: var(--better); stroke-width: 1.1; stroke-dasharray: 2.5 1.8; }
 .ac-foot { display: flex; align-items: center; gap: 12px; }

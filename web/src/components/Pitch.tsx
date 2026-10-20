@@ -297,6 +297,31 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         }
         beaten.forEach((_, i) => focus!.add(i));
       }
+      // ---- pulsing cyan ring on the grass under the player on the ball
+      {
+        const [bx, by, bz] = snap.ball;
+        let best = -1;
+        let bestD = 1.8;
+        snap.pos.forEach(([x, y], i) => {
+          const dd = Math.hypot(x - bx, y - by);
+          if (dd < bestD) [best, bestD] = [i, dd];
+        });
+        if (best >= 0 && bz < 1.2) {
+          const [x, y] = snap.pos[best];
+          const k = (now / 900) % 1;
+          ctx.save();
+          ctx.strokeStyle = LINE;
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 0.9 * (1 - k);
+          path(ctx, P, circlePts(x, y, 1.1 + k * 1.6, 0, Math.PI * 2, 32), true);
+          ctx.stroke();
+          ctx.globalAlpha = 0.85;
+          path(ctx, P, circlePts(x, y, 1.1, 0, Math.PI * 2, 32), true);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
       const order = match.players.map((_, i) => i).sort((a, b) => snap.pos[b][1] - snap.pos[a][1]);
       for (const i of order) {
         const p = match.players[i];
@@ -337,17 +362,23 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
           ctx.stroke();
           ctx.globalAlpha = dim;
         }
+        // Glossy kit-colour token with a white rim (goalkeepers get a cyan rim).
+        const kit = match.teams[p.team].color;
+        const gloss = ctx.createLinearGradient(cx, py - r, cx, py + r);
+        gloss.addColorStop(0, shade(kit, 255, 0.3));
+        gloss.addColorStop(0.5, kit);
+        gloss.addColorStop(1, shade(kit, 0, 0.25));
         ctx.beginPath();
         ctx.arc(cx, py, r, 0, Math.PI * 2);
-        ctx.fillStyle = match.teams[p.team].color;
-        ctx.shadowColor = "rgba(0,0,0,0.45)";
-        ctx.shadowBlur = 6;
-        ctx.shadowOffsetY = 2;
+        ctx.fillStyle = gloss;
+        ctx.shadowColor = "rgba(10,0,14,0.55)";
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 3;
         ctx.fill();
         ctx.shadowColor = "transparent";
         ctx.shadowOffsetY = 0;
-        ctx.lineWidth = p.role === "GK" ? 2.5 : 1.5;
-        ctx.strokeStyle = p.role === "GK" ? "#fff6" : "#0006";
+        ctx.lineWidth = p.role === "GK" ? 2.5 : 1.6;
+        ctx.strokeStyle = p.role === "GK" ? LINE : "rgba(255,255,255,0.9)";
         ctx.stroke();
         ctx.fillStyle = "#fff";
         ctx.font = `700 ${Math.round(r * 0.95)}px ${FONT}`;
@@ -740,7 +771,14 @@ function line(ctx: CanvasRenderingContext2D, P: PFn, pts: Pt[], o: { color: stri
   ctx.restore();
 }
 
-const rectPts = (ax: number, ay: number, bx: number, by: number): Pt[] => [[ax, ay], [bx, ay], [bx, by], [ax, by], [ax, ay]];
+/** Blend a #rrggbb colour towards white (to = 255) or black (to = 0) by t. */
+function shade(hex: string, to: number, t: number) {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.round(v + (to - v) * t));
+  return `rgb(${c.join(",")})`;
+}
+
+const rectPts =(ax: number, ay: number, bx: number, by: number): Pt[] => [[ax, ay], [bx, ay], [bx, by], [ax, by], [ax, ay]];
 const circlePts = (cx: number, cy: number, r: number, a0 = 0, a1 = Math.PI * 2, n = 48): Pt[] =>
   Array.from({ length: n + 1 }, (_, k) => {
     const a = a0 + ((a1 - a0) * k) / n;
@@ -750,19 +788,19 @@ const circlePts = (cx: number, cy: number, r: number, a0 = 0, a1 = Math.PI * 2, 
 function drawPitch(ctx: CanvasRenderingContext2D, proj: Proj, g: Geom) {
   const { P } = proj;
   const m = MARGIN * 0.6;
-  // Grass and mowing stripes.
+  // Matchday purple surface with mowing stripes.
   ctx.save();
   path(ctx, P, rectPts(-m, -m, L + m, W + m), true);
   const [, top] = P(L / 2, W + m);
   const [, bottom] = P(L / 2, -m);
   const grad = ctx.createLinearGradient(0, top, 0, bottom);
-  grad.addColorStop(0, proj.mode > 0.5 ? "#0f3f24" : "#14532d");
-  grad.addColorStop(1, proj.mode > 0.5 ? "#17633a" : "#0f3f24");
+  grad.addColorStop(0, proj.mode > 0.5 ? "#2c0032" : "#3a0742");
+  grad.addColorStop(1, proj.mode > 0.5 ? "#44094d" : "#2c0032");
   ctx.fillStyle = grad;
   ctx.fill();
   ctx.clip();
   const stripes = 14;
-  ctx.fillStyle = "rgba(255,255,255,0.035)";
+  ctx.fillStyle = "rgba(255,255,255,0.045)";
   for (let i = 0; i < stripes; i += 2) {
     path(ctx, P, rectPts((i * L) / stripes, -m, ((i + 1) * L) / stripes, W + m), true);
     ctx.fill();
@@ -770,7 +808,7 @@ function drawPitch(ctx: CanvasRenderingContext2D, proj: Proj, g: Geom) {
   ctx.restore();
 
   ctx.save();
-  ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.strokeStyle = "rgba(4,245,255,0.45)";
   ctx.lineWidth = 1.5;
   const stroke = (pts: Pt[]) => {
     path(ctx, P, pts);
@@ -788,7 +826,7 @@ function drawPitch(ctx: CanvasRenderingContext2D, proj: Proj, g: Geom) {
     const c = side ? Math.PI : 0;
     stroke(circlePts(gx + dir * 11, W / 2, 9.15, c - a, c + a, 20));
     // Goal (frame on the ground plus posts and crossbar in broadcast view).
-    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillStyle = "rgba(4,245,255,0.1)";
     path(ctx, P, rectPts(gx, W / 2 - 3.66, gx - dir * 2, W / 2 + 3.66), true);
     ctx.fill();
     ctx.stroke();
@@ -805,7 +843,7 @@ function drawPitch(ctx: CanvasRenderingContext2D, proj: Proj, g: Geom) {
     }
   }
   // Spots.
-  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.fillStyle = "rgba(4,245,255,0.6)";
   for (const [x, y] of [[L / 2, W / 2], [11, W / 2], [L - 11, W / 2]] as Pt[]) {
     const [sx, sy] = P(x, y);
     ctx.beginPath();
