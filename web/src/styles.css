@@ -682,3 +682,41 @@ select.lang option { background: var(--purple-deep); }
   .decision .dc-side .explain-box { margin-top: 6px; }
   .decision .dc-side .dc-actions { margin-top: 8px; }
 }
+
+/* ---------- half-time / full-time graphic ---------- */
+.scoreboard-tv {
+  position: absolute; left: 50%; top: 50%; z-index: 5; width: min(560px, calc(100% - 32px));
+  transform: translate(-50%, -50%); text-align: center;
+  background: linear-gradient(160deg, rgba(55,0,60,0.97), rgba(26,0,32,0.96));
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  overflow: hidden; animation: sb-in 0.5s cubic-bezier(.2,.9,.25,1);
+}
+@keyframes sb-in { from { opacity: 0; transform: translate(-50%, -42%) scale(0.96); } }
+.sb-strip {
+  padding: 7px 0; font-size: 13px; font-weight: 900; letter-spacing: 0.32em; color: var(--purple); background: var(--better);
+}
+.sb-main {
+  display: grid; grid-template-columns: 1fr auto 1fr; grid-template-areas: "home score away" "hs . as";
+  align-items: center; gap: 4px 18px; padding: 18px 22px 10px;
+}
+.sb-team { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; }
+.sb-team.home { grid-area: home; justify-content: flex-end; }
+.sb-team.away { grid-area: away; flex-direction: row-reverse; justify-content: flex-end; }
+.sb-bar { width: 6px; height: 26px; border-radius: 3px; flex: none; }
+.sb-score { grid-area: score; font-size: 46px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; }
+.sb-score span { margin: 0 10px; color: var(--muted); font-weight: 700; }
+.sb-scorers { display: grid; gap: 2px; font-size: 12.5px; color: #e6d9ea; min-height: 16px; }
+.sb-scorers.home { grid-area: hs; justify-items: end; }
+.sb-scorers.away { grid-area: as; justify-items: start; }
+.sb-stats { display: grid; gap: 6px; margin: 4px 22px 0; padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.1); }
+.sb-stat { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; font-size: 13px; }
+.sb-stat span { color: var(--muted); font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.sb-stat b:first-child { text-align: right; }
+.sb-stat b:last-child { text-align: left; }
+.sb-actions { display: flex; justify-content: center; gap: 10px; padding: 6px 0 16px; }
+@media (max-width: 720px) {
+  .sb-main { padding: 14px 12px 8px; gap: 4px 10px; }
+  .sb-team { font-size: 13px; gap: 6px; }
+  .sb-score { font-size: 32px; }
+  .sb-stats { margin: 4px 12px 0; }
+}

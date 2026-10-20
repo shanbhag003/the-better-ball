@@ -24,6 +24,7 @@ export async function loadMatch(url: string): Promise<Match> {
     frames,
     stride,
     nFrames: b.frames.length,
+    kickoff2: b.meta.t0 + Math.max(0, b.frames.findIndex((row) => row[0] === 2)) / b.meta.fps,
     events: b.events,
     decisions,
     byId,
@@ -78,8 +79,41 @@ export function recentDecisions(m: Match, t: number, window: number): Decision[]
 }
 
 export function clock(m: Match, t: number): { label: string; half: string } {
-  const half = t >= m.meta.duration / 2 + m.meta.t0 ? "2nd half" : "1st half";
+  // The breaks read like TV: 45:00 · Half-time and 90:00 · Full time.
+  if (t >= m.meta.t0 + m.meta.duration - 0.5) return { label: "90:00", half: "Full time" };
+  if (t >= m.kickoff2 - 0.25 && t < m.kickoff2) return { label: "45:00", half: "Half-time" };
+  const half = t >= m.kickoff2 ? "2nd half" : "1st half";
   const mm = Math.floor(t / 60);
   const ss = Math.floor(t % 60);
   return { label: `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`, half };
 }
+
+/** Half-time or full-time break: players walk off, then the score graphic. */
+export interface Interlude {
+  kind: "ht" | "ft";
+  t: number; // match time the break holds at
+  start: number; // performance.now() when it began
+}
+
+const WALK_OFF = 5; // seconds for the last player to reach the tunnel
+
+/**
+ * Positions while players walk to the tunnel on the near touchline, and how visible each one is.
+ * Players closest to the tunnel go first; each team heads for its own side of it.
+ */
+export function walkOff(m: Match, pos: [number, number][], k: number): { pos: [number, number][]; alpha: number[] } {
+  const alpha: number[] = [];
+  const out = pos.map(([x, y], i) => {
+    const tx = m.players[i].team === 0 ? 50.5 : 54.5;
+    const ty = -3;
+    const delay = (Math.hypot(tx - x, ty - y) / 110) * 1.2;
+    const f = Math.max(0, Math.min(1, (k - delay) / (WALK_OFF - 1.2)));
+    const e = f * f * (3 - 2 * f);
+    alpha.push(1 - Math.max(0, (e - 0.82) / 0.18));
+    return [x + (tx - x) * e, y + (ty - y) * e] as [number, number];
+  });
+  return { pos: out, alpha };
+}
+
+/** Seconds into the break when the score graphic comes up. */
+export const BOARD_DELAY = WALK_OFF + 0.2;

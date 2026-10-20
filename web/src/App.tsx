@@ -5,8 +5,9 @@ import { Controls } from "./components/Controls";
 import { DecisionCard } from "./components/DecisionCard";
 import { Onboarding } from "./components/Onboarding";
 import { Pitch } from "./components/Pitch";
+import { ScoreBoard } from "./components/ScoreBoard";
 import { Sidebar } from "./components/Sidebar";
-import { clock, loadMatch, scoreAt } from "./data";
+import { BOARD_DELAY, clock, loadMatch, scoreAt, type Interlude } from "./data";
 import { useAiPrefs } from "./aiPrefs";
 import { prefetchPundit } from "./pundit";
 import { AiBadge } from "./components/Ai";
@@ -101,6 +102,32 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
   const [tourIdx, setTourIdx] = useState(0);
   const pending = useRef<Decision | null>(null);
 
+  // Half-time and full-time breaks: players walk off, then the TV score graphic.
+  const kickoff2 = match.kickoff2;
+  const htStop = kickoff2 - 0.2; // last frame of the first half
+  const [interlude, setInterlude] = useState<Interlude | null>(null);
+  const [boardUp, setBoardUp] = useState(false); // the graphic comes up once the players are off
+  useEffect(() => {
+    setBoardUp(false);
+    if (!interlude) return;
+    const id = window.setTimeout(() => setBoardUp(true), BOARD_DELAY * 1000);
+    return () => window.clearTimeout(id);
+  }, [interlude]);
+  const secondHalf = useCallback(() => {
+    setInterlude(null);
+    pb.seek(kickoff2);
+    pb.play();
+  }, [pb, kickoff2]);
+  useEffect(() => {
+    if (interlude?.kind !== "ht") return;
+    const id = window.setTimeout(secondHalf, (BOARD_DELAY + 6) * 1000);
+    return () => window.clearTimeout(id);
+  }, [interlude, secondHalf]);
+  // Seeking away or pressing play ends the break.
+  useEffect(() => {
+    if (interlude && (pb.playing || Math.abs(pb.t - interlude.t) > 0.5)) setInterlude(null);
+  });
+
   const allMoments = useMemo(() => {
     if (playerFilter !== null) {
       // A player's own biggest missed chances.
@@ -149,6 +176,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
     pb.stopAt = (from, to) => {
       const p = pending.current;
       if (p && from < p.t && to >= p.t) return p.t;
+      if (!p && from < htStop && to >= htStop) return htStop;
       if (autoStop) {
         const soon = allMoments.find((d) => d.t > to && d.t - to < 10);
         if (soon) prefetch(soon.id);
@@ -158,11 +186,20 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
       return null;
     };
     pb.onStop = (t) => {
+      if (t === htStop && !pending.current) {
+        setSelected(null);
+        setInterlude({ kind: "ht", t, start: performance.now() });
+        return;
+      }
       const d = pending.current && Math.abs(pending.current.t - t) < 1e-6 ? pending.current : allMoments.find((m) => m.t === t) ?? null;
       pending.current = null;
       setSelected(d);
     };
-  }, [pb, allMoments, autoStop, prefetch]);
+    pb.onEnd = () => {
+      setSelected(null);
+      setInterlude({ kind: "ft", t: pb.max, start: performance.now() });
+    };
+  }, [pb, allMoments, autoStop, prefetch, htStop]);
 
   // Drop the card once playback moves on.
   useEffect(() => {
@@ -245,13 +282,25 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
               onDetails={() => setDetailsOpen(true)}
               onNext={nextMoment ? () => goTo(nextMoment) : null}
               pundit={punditOn ? { voice: aiPrefs.voice, language: PUNDIT_LANGUAGE, sound } : null}
+              interlude={interlude}
             />
 
-            {!started && !pb.playing && (
+            {!started && !pb.playing && !interlude && (
               <button className="big-play" onClick={() => { setStarted(true); pb.play(); }}>
                 <span className="circle"><Play size={30} fill="currentColor" /></span>
                 <span>Play match</span>
               </button>
+            )}
+
+            {interlude && boardUp && (
+              <ScoreBoard
+                key={interlude.start}
+                match={match}
+                interlude={interlude}
+                onContinue={secondHalf}
+                onRestart={() => { setInterlude(null); pb.seek(pb.min); pb.play(); }}
+                onClose={() => setInterlude(null)}
+              />
             )}
 
             {showCard && (

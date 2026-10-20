@@ -10,6 +10,8 @@ export class Playback {
   /** Called while playing; return a time to stop at (inclusive) or null. */
   stopAt: ((from: number, to: number) => number | null) | null = null;
   onStop: ((t: number) => void) | null = null;
+  /** Called when playback runs to the end of the match. */
+  onEnd: (() => void) | null = null;
 
   private listeners = new Set<() => void>();
   private raf = 0;
@@ -72,6 +74,7 @@ export class Playback {
     this.t = to;
     if (to >= this.max) {
       this.pause();
+      this.onEnd?.();
       return;
     }
     // Notify UI ~15 times a second; the canvas polls `t` itself.

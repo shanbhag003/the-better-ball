@@ -1,7 +1,7 @@
 import { ChevronRight, Maximize2, Mic, Minus, PanelRightOpen, Pause, Play, Plus, RotateCcw, Tv } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { follow, L, projector, W, type Cam, type Geom, type Proj } from "../camera";
-import { recentDecisions, snapshot } from "../data";
+import { recentDecisions, snapshot, walkOff, type Interlude } from "../data";
 import type { PunditScript, Voice } from "../api";
 import { goalPct, minute, pct, VERDICT } from "../labels";
 import { getPundit, lineTimes } from "../pundit";
@@ -88,6 +88,8 @@ interface Props {
   onNext?: (() => void) | null;
   /** AI Pundit: script + voice for breakdowns (null when the AI service is unavailable). */
   pundit?: { voice: Voice; language: string; sound: boolean } | null;
+  /** Half-time / full-time break in progress (players walk off). */
+  interlude?: Interlude | null;
 }
 
 interface Hover {
@@ -96,7 +98,7 @@ interface Hover {
   y: number;
 }
 
-export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown, onDetails, onNext, pundit }: Props) {
+export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown, onDetails, onNext, pundit, interlude }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   // Height of the caption / lower-third: on phones they sit under the pitch and need room.
   const [overlayH, setOverlayH] = useState(0);
@@ -111,8 +113,8 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
     overlayObs.current.observe(el);
   }, []);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const propsRef = useRef({ selected, showBetter, broadcast, onBreakdown, pundit });
-  propsRef.current = { selected, showBetter, broadcast, onBreakdown, pundit };
+  const propsRef = useRef({ selected, showBetter, broadcast, onBreakdown, pundit, interlude });
+  propsRef.current = { selected, showBetter, broadcast, onBreakdown, pundit, interlude };
   const geom = useRef<Geom>({ s: 1, ox: 0, oy: 0, w: 0, h: 0 });
   const cam = useRef<Cam>({ mode: 0, fx: L / 2, fy: W / 2, zoom: 1 });
   const projRef = useRef<Proj | null>(null);
@@ -178,9 +180,17 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
 
       const t = pb.t;
       const snap = snapshot(match, t);
+      const { selected, showBetter, broadcast, onBreakdown, interlude } = propsRef.current;
+      // ---- half-time / full-time: players walk off to the tunnel
+      const breakT = interlude ? (now - interlude.start) / 1000 : 0;
+      let fade: number[] | null = null;
+      if (interlude) {
+        const w = walkOff(match, snap.pos, breakT);
+        snap.pos = w.pos;
+        fade = w.alpha;
+      }
       posRef.current = snap.pos;
-      const { selected, showBetter, broadcast, onBreakdown } = propsRef.current;
-      const sticky = selected && Math.abs(t - selected.t) < 0.25 ? selected : null;
+      const sticky = !interlude && selected && Math.abs(t - selected.t) < 0.25 ? selected : null;
 
       // ---- telestration clock (broadcast breakdown of a key moment)
       const breakdown = broadcast && sticky ? sticky : null;
@@ -208,9 +218,11 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
       const show = tl.script?.show ?? { space: true, back_line: true, beaten: true, offside: true };
 
       const better = (d: Decision) => showBetter && d.cost >= match.meta.good_threshold && !!d.best;
-      const list: { d: Decision; alpha: number; sticky: boolean }[] = sticky
-        ? [{ d: sticky, alpha: 1, sticky: true }]
-        : holdOverlays(recentDecisions(match, t, HOLD * pb.speed), t, pb.speed);
+      const list: { d: Decision; alpha: number; sticky: boolean }[] = interlude
+        ? []
+        : sticky
+          ? [{ d: sticky, alpha: 1, sticky: true }]
+          : holdOverlays(recentDecisions(match, t, HOLD * pb.speed), t, pb.speed);
 
       // ---- camera: frame everything that is on screen (passes, lofted arcs, the ball)
       const target: Cam = { mode: 0, fx: L / 2, fy: W / 2, zoom: 1 };
@@ -229,6 +241,7 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         // Leave room for name tags above and the lower-third below during a breakdown.
         const pad = breakdown ? { t: 0.15, b: 0.26, l: 0.06, r: 0.06 } : { t: 0.08, b: 0.08, l: 0.05, r: 0.05 };
         target.zoom = fitZoom(g, target, pts, pad, 0.4, breakdown ? 1.05 : 0.82);
+        if (interlude) Object.assign(target, { fx: L / 2, fy: W / 2 - 4, zoom: 0.62 }); // wide, on the tunnel
       }
       follow(cam.current, target, dt, breakdown ? 0.3 : 0.6);
       const proj = withView(projector(g, cam.current), g, view.current);
@@ -326,7 +339,7 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
           const dd = Math.hypot(x - bx, y - by);
           if (dd < bestD) [best, bestD] = [i, dd];
         });
-        if (best >= 0 && bz < 1.2) {
+        if (best >= 0 && bz < 1.2 && !interlude) {
           const [x, y] = snap.pos[best];
           const k = (now / 900) % 1;
           ctx.save();
@@ -349,7 +362,8 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         const [cx, cy] = P(x, y);
         const r = Math.max(7, Math.min(17, 0.8 * proj.scale(x, y)));
         const lift = r * 0.55 * proj.mode; // stand players up a little in broadcast view
-        const dim = focus && !focus.has(i) ? (breakdown ? 0.3 : 0.45) : 1;
+        const dim = (focus && !focus.has(i) ? (breakdown ? 0.3 : 0.45) : 1) * (fade ? fade[i] : 1);
+        if (dim <= 0.01) continue;
         ctx.save();
         ctx.globalAlpha = dim;
         // Ground shadow.
@@ -433,7 +447,8 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         }
       }
 
-      // ---- ball with height
+      // ---- ball with height (the referee has it during a break)
+      if (interlude) return;
       const [bx, by, bz] = snap.ball;
       const [gx, gy] = P(bx, by);
       ctx.fillStyle = "rgba(0,0,0,0.35)";

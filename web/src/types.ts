@@ -103,6 +103,7 @@ export interface Match {
   frames: Int16Array; // per frame: period, ball x, y, z, then 22 * (x, y) — decimetres
   stride: number;
   nFrames: number;
+  kickoff2: number; // match time of the second-half kickoff
   events: MatchEvent[];
   decisions: Decision[]; // sorted by time
   byId: Map<number, Decision>;
