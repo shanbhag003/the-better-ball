@@ -203,7 +203,7 @@ async def explain(body: ExplainIn) -> dict:
 @app.post("/api/pundit", dependencies=[Depends(rate_limited)])
 async def pundit(body: PunditIn) -> dict:
     """AI Pundit: a script for the broadcast breakdown, read aloud by Azure AI Speech."""
-    lang = _language(body.language)
+    lang = "British English"  # the pundit speaks British English only, to match its voice
     out = await _run(
         ("pundit", body.moment_id, body.voice, lang),
         lambda client: agents.pundit_script(body.moment_id, body.voice, lang, client=client),
@@ -211,9 +211,9 @@ async def pundit(body: PunditIn) -> dict:
     )
     out.setdefault("text", " ".join(out.get("lines", [])))
     if body.audio and "audio" not in out:
-        mp3 = await speech.synthesize(out.get("lines", []), lang, body.voice)
+        mp3 = await speech.synthesize(out.get("lines", []), body.voice)
         out["audio"] = f"data:audio/mpeg;base64,{base64.b64encode(mp3).decode()}" if mp3 else None
-        out["speech_voice"] = speech.voice_for(lang, body.voice)[1] if mp3 else None
+        out["speech_voice"] = speech.VOICE if mp3 else None
         _cache[("pundit", body.moment_id, body.voice, lang)] = {k: v for k, v in out.items() if k != "cached"}
     return out
 

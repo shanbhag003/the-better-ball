@@ -89,7 +89,7 @@ A React app that replays the match on an animated 2D pitch:
 | **Narrator agent** | **Explain** button on each decision card: turns the moment's facts into 3–4 sentences in *fan* or *analyst* voice, in 8 languages. |
 | **Analyst → Narrator** (sequential workflow) | **Ask AI** tab: the Analyst calls the MCP tools to gather evidence, then the Narrator answers for the chosen audience. |
 | **AI Pundit** | Directs each Broadcast-view breakdown: writes a headline and three spoken beats, and **chooses which telestration layers to draw** (space, back line, beaten defenders, offside). The animation is timed to its voice. |
-| **Azure AI Speech** | Reads the Pundit's lines aloud with neural voices in 8 languages (keyless, via the app's managed identity). |
+| **Azure AI Speech** | Reads the Pundit's lines aloud in a natural British English neural voice (keyless, via the app's managed identity). |
 | **Attack coach ‖ Possession coach → Head coach** (concurrent workflow) | **AI coach report**: two specialists review the team in parallel; the head coach merges their notes into *What worked / Fix next / Player spotlight*. |
 
 **Grounding:** agents may only use numbers returned by the tools; the prompts forbid inventing players, minutes or stats.

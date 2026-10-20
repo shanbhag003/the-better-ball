@@ -1,4 +1,4 @@
-import { ChevronRight, Maximize2, Mic, Minus, PanelRightOpen, Plus, RotateCcw, Tv } from "lucide-react";
+import { ChevronRight, Maximize2, Mic, Minus, PanelRightOpen, Pause, Play, Plus, RotateCcw, Tv } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { follow, L, projector, W, type Cam, type Geom, type Proj } from "../camera";
 import { recentDecisions, snapshot } from "../data";
@@ -71,8 +71,9 @@ interface Tele {
   starts: number[];
   audio: HTMLAudioElement | null;
   line: number;
+  pausedAt: number | null; // performance.now() when the viewer paused the pundit
 }
-const IDLE: Tele = { id: null, start: 0, done: false, state: "running", T: DEFAULT_T, script: null, starts: [], audio: null, line: -1 };
+const IDLE: Tele = { id: null, start: 0, done: false, state: "running", T: DEFAULT_T, script: null, starts: [], audio: null, line: -1, pausedAt: null };
 
 interface Props {
   match: Match;
@@ -189,7 +190,8 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
       const T = tl.T;
       const waiting = !!breakdown && tl.state === "waiting";
       // While the pundit's script loads, only the set-up (camera, dim, spotlights) plays.
-      const ph = breakdown ? (waiting ? Math.min((now - tl.start) / 1000, T.played[0] - 0.05) : (now - tl.start) / 1000) : 99;
+      const clock = tl.pausedAt ?? now; // a paused pundit freezes the telestration too
+      const ph = breakdown ? (waiting ? Math.min((clock - tl.start) / 1000, T.played[0] - 0.05) : (clock - tl.start) / 1000) : 99;
       if (breakdown && !waiting) {
         const idx = tl.starts.length ? tl.starts.filter((s0) => ph >= s0).length - 1 : -1;
         if (idx !== tl.line && tl.script) {
@@ -455,6 +457,7 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
   function startBreakdown(d: Decision, now: number) {
     tele.current.audio?.pause();
     tele.current = { ...IDLE, id: d.id, start: now, state: "waiting" };
+    setPaused(false);
     setLowerThird(null);
     setHeadline(null);
     propsRef.current.onBreakdown?.(false);
@@ -473,9 +476,10 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         if (tele.current.id !== d.id || tele.current.state !== "waiting") return;
         const starts = script ? lineTimes(script.lines, total) : [];
         Object.assign(tele.current, {
-          state: "running", start: performance.now(), script, starts, audio, line: -1,
+          state: "running", start: performance.now(), script, starts, audio, line: -1, pausedAt: null,
           T: script ? timelineFor(starts, total) : DEFAULT_T,
         });
+        setPaused(false);
         setHeadline(script?.headline ?? null);
         audio?.play().catch(() => {}); // autoplay blocked: captions still run
       };
@@ -513,6 +517,7 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
   function stopBreakdown() {
     tele.current.audio?.pause();
     tele.current = { ...IDLE };
+    setPaused(false);
     setLowerThird(null);
     setCaption(null);
     setHeadline(null);
@@ -524,12 +529,30 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
   }, [pundit?.sound]);
   useEffect(() => () => tele.current.audio?.pause(), []);
 
+  // Pause / resume the pundit: the voice and the telestration clock stop together.
+  const [paused, setPaused] = useState(false);
+  const togglePause = () => {
+    const tl = tele.current;
+    if (tl.id === null) return;
+    if (tl.pausedAt !== null) {
+      tl.start += performance.now() - tl.pausedAt;
+      tl.pausedAt = null;
+      tl.audio?.play().catch(() => {});
+      setPaused(false);
+    } else {
+      tl.pausedAt = performance.now();
+      tl.audio?.pause();
+      setPaused(true);
+    }
+  };
+
   const replay = () => {
     const tl = tele.current;
     if (!tl.script && tl.id === null) return;
     tl.audio?.pause();
     if (tl.audio) tl.audio.currentTime = 0;
-    Object.assign(tl, { start: performance.now(), done: false, line: -1, state: "running" });
+    Object.assign(tl, { start: performance.now(), done: false, line: -1, state: "running", pausedAt: null });
+    setPaused(false);
     setLowerThird(null);
     propsRef.current.onBreakdown?.(false);
     tl.audio?.play().catch(() => {});
@@ -647,6 +670,12 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         <div ref={overlayRef} className={`pundit-caption ${caption.waiting ? "waiting" : ""}`} aria-live="polite">
           <span className="pc-badge"><Mic size={12} /> AI PUNDIT</span>
           <span className="pc-text">{caption.text}</span>
+          {!caption.waiting && (
+            <button className="pc-pause" onClick={togglePause} aria-label={paused ? "Resume the pundit" : "Pause the pundit"}
+              title={paused ? "Resume" : "Pause"}>
+              {paused ? <Play size={15} fill="currentColor" /> : <Pause size={15} fill="currentColor" />}
+            </button>
+          )}
         </div>
       )}
       {broadcast && lowerThird && (
@@ -681,12 +710,16 @@ function LowerThird({ boxRef, match, d, headline, onReplay, onDetails, onNext }:
           <div className="lt-title">
             <span className={`lt-verdict ${v.tone}`}>{v.label}</span>
             <b>{headline ? headline.toUpperCase() : p.name.toUpperCase()}</b>
-            {headline && <span className="lt-who">{p.name}</span>}
             <span className="lt-min">{minute(d.t)}</span>
           </div>
           <div className="lt-sub">
-            Played → {who(d.chosen.receiver)} · {pct(d.chosen.p)} to arrive
-            {missed && <> &nbsp;|&nbsp; Better → {who(d.best.receiver)} · {pct(d.best.p)}{d.best.bypassed ? ` · beats ${d.best.bypassed}` : ""}</>}
+            {headline && <span className="lt-who">{p.name}</span>}
+            <span>Played → {who(d.chosen.receiver)} · {pct(d.chosen.p)} to arrive</span>
+            {missed && (
+              <span className="lt-better">
+                Better → {who(d.best.receiver)} · {pct(d.best.p)}{d.best.bypassed ? ` · beats ${d.best.bypassed}` : ""}
+              </span>
+            )}
           </div>
         </div>
         {missed && (

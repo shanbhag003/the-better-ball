@@ -19,6 +19,7 @@ const ONBOARD_KEY = "tbb-onboarded-v1";
 const HELP_KEY = "tbb-help-opened";
 const BROADCAST_OFF_KEY = "tbb-broadcast-off";
 const MUTE_KEY = "tbb-pundit-muted";
+const PUNDIT_LANGUAGE = "British English"; // the pundit voice is British English only
 const LEAD_IN = 4; // seconds of build-up shown before a key moment
 
 function readFlag(key: string) {
@@ -83,9 +84,9 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
   const punditOn = broadcast && aiPrefs.health !== null;
   const prefetch = useCallback(
     (id: number) => {
-      if (punditOn) prefetchPundit(id, aiPrefs.voice, aiPrefs.language);
+      if (punditOn) prefetchPundit(id, aiPrefs.voice, PUNDIT_LANGUAGE);
     },
-    [punditOn, aiPrefs.voice, aiPrefs.language],
+    [punditOn, aiPrefs.voice],
   );
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [autoStop, setAutoStop] = useState(true);
@@ -237,7 +238,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
               onBreakdown={(done) => { setBreakdownDone(done); if (!done) setDetailsOpen(false); }}
               onDetails={() => setDetailsOpen(true)}
               onNext={nextMoment ? () => goTo(nextMoment) : null}
-              pundit={punditOn ? { voice: aiPrefs.voice, language: aiPrefs.language, sound } : null}
+              pundit={punditOn ? { voice: aiPrefs.voice, language: PUNDIT_LANGUAGE, sound } : null}
             />
 
             {!started && !pb.playing && (
