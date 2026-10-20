@@ -57,11 +57,11 @@ export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAu
           <span><i className="lg goal" /> Goal</span>
         </div>
         <div className="group toggles">
-          <button className={`chip-toggle ${broadcast ? "on broadcast" : ""}`} onClick={() => setBroadcast(!broadcast)} aria-pressed={broadcast}>
+          <button className={`chip-toggle broadcast-toggle ${broadcast ? "on broadcast" : ""}`} onClick={() => setBroadcast(!broadcast)} aria-pressed={broadcast}>
             <Tv size={14} /> Broadcast view
           </button>
           {punditOn && (
-            <button className={`chip-toggle ${sound ? "on broadcast" : ""}`} onClick={() => setSound(!sound)} aria-pressed={sound}
+            <button className={`chip-toggle pundit-toggle ${sound ? "on broadcast" : ""}`} onClick={() => setSound(!sound)} aria-pressed={sound}
               title="AI Pundit commentary, voiced by Azure AI Speech">
               {sound ? <Volume2 size={14} /> : <VolumeX size={14} />} Pundit voice
             </button>
