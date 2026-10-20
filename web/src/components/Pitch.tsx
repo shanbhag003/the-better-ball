@@ -417,6 +417,11 @@ function pill(ctx: CanvasRenderingContext2D, x: number, y: number, text: string,
   ctx.font = `600 12px ${FONT}`;
   const w = ctx.measureText(text).width + 16;
   const h = 22;
+  // Keep labels fully on the canvas near the touchlines.
+  const cw = ctx.canvas.width / (window.devicePixelRatio || 1);
+  const ch = ctx.canvas.height / (window.devicePixelRatio || 1);
+  x = Math.min(Math.max(x, w / 2 + 4), cw - w / 2 - 4);
+  y = Math.min(Math.max(y, h / 2 + 4), ch - h / 2 - 4);
   ctx.beginPath();
   ctx.roundRect(x - w / 2, y - h / 2, w, h, 11);
   ctx.fillStyle = bg;
