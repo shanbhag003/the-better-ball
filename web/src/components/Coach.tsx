@@ -11,6 +11,7 @@ const STEPS: Step[] = [
   { sel: ".pitch-legend", title: "Read the arrows", text: "White = the pass played. Green dashed = the better option." },
   { sel: ".timeline", title: "Find the moments", text: "Amber ticks are key moments. Click one to jump there." },
   { sel: ".sidebar .list", title: "Biggest missed chances", text: "Every card is a moment. Click to replay it." },
+  { sel: ".chip-toggle.broadcast", title: "Broadcast view", text: "TV camera angle. Each key moment gets a pundit-style breakdown." },
   { sel: ".toggles", title: "Your controls", text: "Hide the better passes or stop auto-pausing." },
   { sel: ".coach-tab", title: "AI coach", text: "Two AI coaches review a team in parallel. The head coach writes the report." },
   { sel: ".ask-tab", title: "Ask the AI", text: "Microsoft Foundry agents answer questions about the match, for fans or analysts." },

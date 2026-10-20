@@ -68,6 +68,10 @@ Verdicts: `optimal` · `good` · `clear_upgrade` (the other pass was safer **and
 A React app that replays the match on an animated 2D pitch:
 - **Played pass:** a solid white arrow. **Better option:** a glowing dashed green arrow, each labelled with its success %.
 - **Key moments:** the biggest missed chances, shown as amber markers on the timeline and as a list. A guided tour plays the build-up, pauses, and explains each one.
+- **Broadcast view (Monday Night Football style):** a TV camera angle that follows the ball. At each key moment the camera
+  zooms in and runs a telestration: spotlights and name tags, the played pass draws itself, a rewind, the shaded space the
+  better runner could reach first, the defending back line, the better pass sweeping through, beaten defenders lighting up,
+  then a broadcast lower-third with Replay, Details and Next.
 - **Decision card:** played option vs better option, showing chance the pass arrives, goal chance, and how much goal chance was missed.
 - **Players tab:** each player's share of good decisions. Click a player to see their own moments.
 - First-run walkthrough, keyboard shortcuts, and a mobile layout.

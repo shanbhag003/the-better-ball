@@ -528,3 +528,51 @@ select.lang option { background: var(--purple-deep); }
 .ac-foot .line { width: 14px; vertical-align: middle; margin-right: 3px; }
 .ac-foot .btn { margin-left: auto; }
 .btn.sm { height: 26px; padding: 0 9px; font-size: 11.5px; border-radius: 8px; }
+
+/* ---------- broadcast view (MNF-style breakdowns) ---------- */
+.chip-toggle.on.broadcast { color: var(--cyan); border-color: rgba(4,245,255,0.45); background: rgba(4,245,255,0.08); }
+.pitch-card.mnf .decision { bottom: auto; top: 56px; max-height: calc(100% - 150px); }
+.lower-third {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 3;
+  width: min(760px, calc(100% - 28px)); animation: lt-in 0.45s cubic-bezier(.2,.9,.25,1);
+}
+@keyframes lt-in { from { opacity: 0; transform: translate(-50%, 18px); } }
+.lt-brand {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; font-size: 10.5px; font-weight: 800;
+  letter-spacing: 0.12em; color: var(--purple); background: var(--better); border-radius: 6px 6px 0 0;
+}
+.lt-main {
+  display: flex; align-items: stretch; gap: 0; min-height: 60px; overflow: hidden;
+  background: linear-gradient(90deg, rgba(55,0,60,0.97), rgba(26,0,32,0.95));
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 0 10px 10px 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+.lt-bar { width: 6px; flex: none; }
+.lt-num { display: grid; place-items: center; width: 52px; flex: none; font-size: 24px; font-weight: 900; color: #fff; }
+.lt-text { display: grid; align-content: center; gap: 3px; padding: 8px 14px; min-width: 0; flex: 1; }
+.lt-title { display: flex; align-items: center; gap: 10px; font-size: 16px; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
+.lt-verdict { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 4px; }
+.lt-verdict.warn { background: var(--warn); color: #1a0020; }
+.lt-verdict.bad { background: var(--pink); color: #fff; }
+.lt-verdict.good { background: var(--better); color: #1a0020; }
+.lt-verdict.info { background: var(--cyan); color: #1a0020; }
+.lt-min { color: var(--muted); font-weight: 700; font-size: 13px; }
+.lt-sub { font-size: 12px; color: #e6d9ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lt-stat { display: grid; place-content: center; justify-items: center; padding: 0 18px; background: rgba(255,185,0,0.12); border-left: 1px solid rgba(255,255,255,0.1); }
+.lt-big { font-size: 24px; font-weight: 900; color: var(--warn); line-height: 1; }
+.lt-cap { font-size: 9.5px; font-weight: 800; letter-spacing: 0.14em; color: var(--muted); margin-top: 3px; }
+.lt-replay { width: 40px; flex: none; display: grid; place-items: center; color: var(--muted); border-left: 1px solid rgba(255,255,255,0.1); }
+.lt-replay:hover { color: var(--text); background: var(--surface-2); }
+@media (max-width: 720px) {
+  .lt-sub { display: none; }
+  .lt-num { width: 40px; font-size: 18px; }
+  .pitch-card.mnf .decision { top: auto; }
+}
+
+.lt-actions { display: flex; align-items: center; flex: none; border-left: 1px solid rgba(255,255,255,0.1); }
+.lt-actions button {
+  display: inline-flex; align-items: center; gap: 5px; height: 100%; padding: 0 12px; font-size: 12px; font-weight: 700;
+  color: var(--muted); border-right: 1px solid rgba(255,255,255,0.06);
+}
+.lt-actions button:hover { color: var(--text); background: var(--surface-2); }
+.lt-actions button.next { color: var(--purple); background: var(--better); border-right: 0; }
+.lt-actions button.next:hover { background: #33ff9d; }

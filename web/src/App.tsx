@@ -15,6 +15,7 @@ import type { Decision, Match } from "./types";
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/match_7.json`;
 const ONBOARD_KEY = "tbb-onboarded-v1";
+const BROADCAST_OFF_KEY = "tbb-broadcast-off";
 const LEAD_IN = 4; // seconds of build-up shown before a key moment
 
 function readFlag(key: string) {
@@ -22,6 +23,13 @@ function readFlag(key: string) {
     return localStorage.getItem(key) === "1";
   } catch {
     return false;
+  }
+}
+function writeValue(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
   }
 }
 function writeFlag(key: string) {
@@ -57,6 +65,13 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
   usePlayback(pb);
   const [selected, setSelected] = useState<Decision | null>(null);
   const [showBetter, setShowBetter] = useState(true);
+  const [broadcast, setBroadcastState] = useState(() => readFlag(BROADCAST_OFF_KEY) === false);
+  const setBroadcast = (on: boolean) => {
+    setBroadcastState(on);
+    writeValue(BROADCAST_OFF_KEY, on ? "0" : "1");
+  };
+  const [breakdownDone, setBreakdownDone] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [autoStop, setAutoStop] = useState(true);
   const [teamFilter, setTeamFilter] = useState<number | null>(null);
   const [playerFilter, setPlayerFilter] = useState<number | null>(null);
@@ -153,7 +168,8 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [pb, nextMoment, goTo]);
 
-  const showCard = selected && !pb.playing && Math.abs(pb.t - selected.t) < 0.3;
+  // In broadcast mode the lower-third is the graphic; the full card opens on request.
+  const showCard = selected && !pb.playing && Math.abs(pb.t - selected.t) < 0.3 && (!broadcast || (breakdownDone && detailsOpen));
 
   const live = useMemo(
     () => ({
@@ -174,7 +190,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
 
       <main className="layout">
         <section className="stage">
-          <div className="pitch-card card">
+          <div className={`pitch-card card ${broadcast ? "mnf" : ""}`}>
             <div className="pitch-legend">
               <span><i className="line played" /> Played</span>
               <span><i className="line better" /> Better option</span>
@@ -187,7 +203,11 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
               )}
               <span className="muted">Hover a player for details</span>
             </div>
-            <Pitch match={match} pb={pb} selected={selected} showBetter={showBetter} />
+            <Pitch match={match} pb={pb} selected={selected} showBetter={showBetter} broadcast={broadcast}
+              onBreakdown={(done) => { setBreakdownDone(done); if (!done) setDetailsOpen(false); }}
+              onDetails={() => setDetailsOpen(true)}
+              onNext={nextMoment ? () => goTo(nextMoment) : null}
+            />
 
             {!started && !pb.playing && (
               <button className="big-play" onClick={() => { setStarted(true); pb.play(); }}>
@@ -204,7 +224,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
                 onNext={nextMoment ? () => goTo(nextMoment) : null}
                 nextLabel={tourOn ? `Next · ${tourIdx + 2}/${allMoments.length}` : "Next moment"}
                 onFinish={tourOn ? () => { setTourOn(false); setSelected(null); } : null}
-                onClose={() => setSelected(null)}
+                onClose={() => (broadcast ? setDetailsOpen(false) : setSelected(null))}
               />
             )}
 
@@ -224,6 +244,8 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
             setShowBetter={setShowBetter}
             autoStop={autoStop}
             setAutoStop={setAutoStop}
+            broadcast={broadcast}
+            setBroadcast={setBroadcast}
             moments={moments}
             onMoment={goTo}
           />

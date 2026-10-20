@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Keyboard, Pause, Play, RotateCcw, RotateCw, Sparkles } from "lucide-react";
+import { Eye, EyeOff, Keyboard, Pause, Play, RotateCcw, RotateCw, Sparkles, Tv } from "lucide-react";
 import { useRef, useState } from "react";
 import { minute, VERDICT } from "../labels";
 import { seen, useLive } from "../live";
@@ -12,13 +12,15 @@ interface Props {
   setShowBetter: (v: boolean) => void;
   autoStop: boolean;
   setAutoStop: (v: boolean) => void;
+  broadcast: boolean;
+  setBroadcast: (v: boolean) => void;
   moments: Decision[];
   onMoment: (d: Decision) => void;
 }
 
 const SPEEDS = [1, 2, 4, 8];
 
-export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAutoStop, moments, onMoment }: Props) {
+export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAutoStop, broadcast, setBroadcast, moments, onMoment }: Props) {
   usePlayback(pb);
   return (
     <div className="controls card">
@@ -52,6 +54,9 @@ export function Controls({ match, pb, showBetter, setShowBetter, autoStop, setAu
           <span><i className="lg goal" /> Goal</span>
         </div>
         <div className="group toggles">
+          <button className={`chip-toggle ${broadcast ? "on broadcast" : ""}`} onClick={() => setBroadcast(!broadcast)} aria-pressed={broadcast}>
+            <Tv size={14} /> Broadcast view
+          </button>
           <button className={`chip-toggle ${showBetter ? "on better" : ""}`} onClick={() => setShowBetter(!showBetter)} aria-pressed={showBetter}>
             {showBetter ? <Eye size={14} /> : <EyeOff size={14} />} Better passes
           </button>
