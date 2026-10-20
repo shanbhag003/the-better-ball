@@ -38,7 +38,10 @@ VOICES = {
 GROUNDING = (
     "The match is synthetic, between fictional clubs. Only use numbers that appear in the facts or tool results. "
     "Never invent players, minutes or statistics. 'Goal chance' is the chance a move leads to a goal; "
-    "'chance it arrives' is the chance the pass reaches the team-mate."
+    "'chance it arrives' is the chance the pass reaches the team-mate. "
+    "Position codes: GK goalkeeper; RB/LB full-backs; RCB/LCB centre-backs; DM/RDM/LDM defensive midfielders; "
+    "RCM/LCM central midfielders; CAM attacking midfielder; RW/LW/RAM/LAM wingers; ST striker. "
+    "Only describe a player's role from these codes."
 )
 
 
@@ -50,16 +53,36 @@ def model_name() -> str | None:
     return os.environ.get("FOUNDRY_MODEL")
 
 
-def make_client():
+def fallback_model() -> str | None:
+    """Optional second deployment used when the primary model fails (rate limit, outage)."""
+    return os.environ.get("FOUNDRY_FALLBACK_MODEL") or None
+
+
+def make_client(model: str | None = None):
     """Foundry chat client (Responses API). Uses Azure CLI login locally, managed identity in Azure."""
     from agent_framework.foundry import FoundryChatClient
     from azure.identity import DefaultAzureCredential
 
+    _ensure_azure_cli_on_path()
     return FoundryChatClient(
         project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
-        model=os.environ["FOUNDRY_MODEL"],
+        model=model or os.environ["FOUNDRY_MODEL"],
         credential=DefaultAzureCredential(exclude_interactive_browser_credential=True),
+        # Tool errors (e.g. "'Stanley' is ambiguous: ...") go back to the model so it can correct
+        # itself; hard limits keep a confused agent from looping.
+        function_invocation_configuration={
+            "include_detailed_errors": True,
+            "max_function_calls": 12,
+            "max_duration_seconds": 90,
+        },
     )
+
+
+def _ensure_azure_cli_on_path() -> None:
+    """Local Windows dev: a just-installed Azure CLI is not on PATH of already-running processes."""
+    default = r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin"
+    if os.name == "nt" and os.path.isdir(default) and default not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = default + os.pathsep + os.environ.get("PATH", "")
 
 
 def local_tools() -> list:

@@ -67,13 +67,29 @@ def _language(lang: str) -> str:
     return lang if lang in LANGUAGES else "English"
 
 
+async def _online(online, meta: dict) -> str:
+    """Run the agents on the primary model; on failure retry once on the backup deployment."""
+    try:
+        return await online(agents.make_client())
+    except ValueError:
+        raise
+    except Exception:  # noqa: BLE001
+        backup = agents.fallback_model()
+        if not backup:
+            raise
+        log.warning("primary model failed; retrying on backup %s", backup, exc_info=True)
+        meta["model"] = backup
+        meta["fallback"] = True
+        return await online(agents.make_client(backup))
+
+
 async def _run(key: tuple, online, fallback) -> dict:
     if key in _cache:
         return {**_cache[key], "cached": True}
     started = time.perf_counter()
     meta = _mode()
     try:
-        text = await online() if meta["mode"] == "foundry" else fallback()
+        text = await _online(online, meta) if meta["mode"] == "foundry" else fallback()
     except ValueError as e:  # bad player / team / moment in the request
         raise HTTPException(400, str(e)) from e
     except Exception as e:  # noqa: BLE001 - surface model/network failures to the UI
@@ -113,7 +129,7 @@ async def explain(body: ExplainIn) -> dict:
     lang = _language(body.language)
     return await _run(
         ("explain", body.moment_id, body.voice, lang),
-        lambda: agents.explain(body.moment_id, body.voice, lang),
+        lambda client: agents.explain(body.moment_id, body.voice, lang, client=client),
         lambda: offline.explain(body.moment_id, body.voice),
     )
 
@@ -123,7 +139,7 @@ async def ask(body: AskIn) -> dict:
     lang = _language(body.language)
     return await _run(
         ("ask", body.question.strip().lower(), body.voice, lang),
-        lambda: agents.ask(body.question, body.voice, lang),
+        lambda client: agents.ask(body.question, body.voice, lang, client=client),
         lambda: offline.ask(body.question),
     )
 
@@ -133,6 +149,6 @@ async def coach(body: CoachIn) -> dict:
     lang = _language(body.language)
     return await _run(
         ("coach", body.team.lower(), body.voice, lang),
-        lambda: agents.coach(body.team, body.voice, lang),
+        lambda client: agents.coach(body.team, body.voice, lang, client=client),
         lambda: offline.coach(body.team),
     )
