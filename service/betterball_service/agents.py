@@ -241,6 +241,11 @@ class CardRef(BaseModel):
     kind: Literal["player", "teams", "moment"]
     player: str | None = Field(default=None, description="For kind=player: player name or '#8 NBR'")
     moment_id: int | None = Field(default=None, description="For kind=moment: a moment_id from the findings")
+    focus: Literal["options", "defenders"] = Field(
+        default="options",
+        description="For kind=moment: 'defenders' when the answer is about defending (interceptions, pressure, "
+        "marking, defenders beaten); 'options' when it is about the pass choice",
+    )
 
 
 class AskReply(BaseModel):
@@ -250,9 +255,12 @@ class AskReply(BaseModel):
 
 
 ASK_FORMAT = (
-    "Return: 'answer' (your reply); 'cards' with 0-2 visuals that best support it - 'teams' for a team comparison, "
-    "'player' (give the player's name) when one player is central, 'moment' (give a moment_id that appears in the "
-    "findings) when a specific moment is central; and 'follow_ups': exactly 3 short, natural next questions a user "
+    "Return: 'answer' (your reply); 'cards' with 0-2 visuals; and 'follow_ups'. Card rules: a card must directly "
+    "show the specific thing your answer talks about, otherwise return no card (an empty list is better than a "
+    "loosely related card). 'teams' only when comparing the two teams; 'player' (give the name) only when the "
+    "answer is mainly about one player's overall decisions; 'moment' only for the exact moment_id your answer "
+    "describes, with focus='defenders' if the answer is about defending (interceptions, pressure, marking, "
+    "defenders beaten) or focus='options' if it is about the pass choice. 'follow_ups': exactly 3 short, natural next questions a user "
     "would ask after this answer, in the requested language. Follow-ups must be answerable from the data we have: "
     "pass decisions and their verdicts, chance a pass arrives, goal chance, defenders beaten, offside, goals, shots, "
     "xG, key moments, player and team decision profiles. We do NOT have shots on target, possession %, tackles, "
@@ -270,7 +278,7 @@ def build_cards(refs: list[CardRef]) -> list[dict]:
             elif r.kind == "player" and r.player:
                 cards.append(store.card_player(r.player))
             elif r.kind == "moment" and r.moment_id is not None:
-                cards.append(store.card_moment(int(r.moment_id)))
+                cards.append(store.card_moment(int(r.moment_id), r.focus))
         except (ValueError, KeyError):
             continue
     return cards
@@ -289,7 +297,8 @@ async def ask(question: str, voice: str = "fan", language: str = "English", clie
         rules = live_rules()
         async with match_tools(as_of) as tools:
             findings = _text(await analyst(client, tools).run(
-                f"{rules}\n\nQuestion: {question}\n(When you cite a moment, include its moment_id.)"
+                f"{rules}\n\nQuestion: {question}\n(When you cite a moment, include its moment_id. For questions about "
+                "defending, use the 'defending' facts of get_moment: who intercepted, who threatened the pass, who was beaten.)"
             ))
         if not findings:
             raise RuntimeError("The analyst returned no findings")

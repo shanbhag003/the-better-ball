@@ -43,6 +43,13 @@ export interface MomentCard {
   start: [number, number] | null;
   played: { receiver: number | null; target: [number, number]; p: number; ev: number; kind: string; style: string };
   better: { receiver: number | null; target: [number, number]; p: number; ev: number; kind: string; style: string };
+  outcome?: string | null;
+  focus?: "options" | "defenders";
+  players?: { x: number; y: number; team: number; number: number }[];
+  interceptor?: number | null;
+  threat?: number | null;
+  beaten_played?: number[];
+  beaten_better?: number[];
 }
 
 export type Card = PlayerCard | TeamsCard | MomentCard;

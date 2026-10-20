@@ -69,6 +69,7 @@ class Match:
         self.team_stats = bundle["team_stats"]
         self.player_stats = bundle["player_stats"]
         self.goals = [e for e in bundle["events"] if e["type"] == "goal"]
+        self.events = {e["id"]: e for e in bundle["events"]}
         self.threshold = bundle["meta"].get("good_threshold", 0.012)
 
     # ---------------------------------------------------------------- live view
@@ -173,8 +174,26 @@ class Match:
             "into_space": o.get("style") == "space",
         }
 
+    def interceptor(self, eid: int) -> int | None:
+        """Who won the ball when this pass was cut out (None if it was not intercepted)."""
+        d = self.decisions[eid]
+        if d.get("outcome") != "intercepted":
+            return None
+        r = self.events.get(eid, {}).get("receiver")
+        return r if r is not None and self.players[r]["team"] != d["team"] else None
+
+    def positions_at(self, t: float) -> list[list[float]]:
+        """All 22 player positions (metres) at match time t, from the tracking frames."""
+        meta = self.b["meta"]
+        frames = self.b["frames"]
+        k = max(0, min(len(frames) - 1, round((t - meta["t0"]) * meta["fps"])))
+        row = frames[k]
+        return [[row[4 + 2 * i] / 10, row[5 + 2 * i] / 10] for i in range(len(self.players))]
+
     def moment_facts(self, eid: int) -> dict:
         d = self.decisions[eid]
+        cut_out_by = self.interceptor(eid)
+        threat = d["chosen"].get("threat")
         return {
             "moment_id": eid,
             "minute": _minute(d["t"]),
@@ -187,6 +206,13 @@ class Match:
             "goal_chance_missed": _goal(d["cost"]),
             "set_piece": d.get("set_piece"),
             "teammates_offside": [self.who(i) for i in d.get("offside_players") or []],
+            "defending": {
+                "intercepted_by": self.who(cut_out_by),
+                "defender_most_likely_to_stop_the_played_pass": self.who(threat),
+                "defenders_beaten_by_played_pass": [self.who(i) for i in d["chosen"].get("beaten") or []],
+                "defenders_beaten_by_better_option": [self.who(i) for i in d["best"].get("beaten") or []]
+                if d["cost"] >= self.threshold else [],
+            },
         }
 
 
@@ -406,11 +432,12 @@ def card_teams() -> dict:
     }
 
 
-def card_moment(moment_id: int) -> dict:
+def card_moment(moment_id: int, focus: str = "options") -> dict:
     m = load()
     if moment_id not in m.seen():
         raise ValueError("Moment not available yet.")
     d = m.decisions[moment_id]
+    pos = m.positions_at(d["t"])
 
     def opt(o):
         return {"receiver": o.get("receiver"), "target": o.get("target"), "p": o.get("p"), "ev": o["ev"],
@@ -428,4 +455,12 @@ def card_moment(moment_id: int) -> dict:
         "start": start,
         "played": opt(d["chosen"]),
         "better": opt(d["best"]),
+        "outcome": d.get("outcome"),
+        "focus": focus if focus in ("options", "defenders") else "options",
+        "players": [{"x": round(x, 1), "y": round(y, 1), "team": p["team"], "number": p["number"]}
+                    for (x, y), p in zip(pos, m.players)],
+        "interceptor": m.interceptor(moment_id),
+        "threat": d["chosen"].get("threat"),
+        "beaten_played": d["chosen"].get("beaten") or [],
+        "beaten_better": (d["best"].get("beaten") or []) if d["cost"] >= m.threshold else [],
     }

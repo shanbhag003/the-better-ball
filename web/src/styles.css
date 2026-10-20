@@ -576,3 +576,6 @@ select.lang option { background: var(--purple-deep); }
 .lt-actions button:hover { color: var(--text); background: var(--surface-2); }
 .lt-actions button.next { color: var(--purple); background: var(--better); border-right: 0; }
 .lt-actions button.next:hover { background: #33ff9d; }
+.mp-label { font-weight: 800; paint-order: stroke; stroke: rgba(10,0,14,0.85); stroke-width: 0.6px; }
+.ac-caption { color: #e6d9ea; line-height: 1.4; }
+.tag.focus { margin-left: 6px; color: #ff4d8d; background: rgba(233,0,82,0.14); }
