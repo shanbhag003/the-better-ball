@@ -17,26 +17,7 @@ Built for the [Microsoft × Premier League "Inside the Game" Hackathon](https://
 
 ## How it works
 
-```
- ┌──────────────────────┐   tracking + events    ┌─────────────────────────┐
- │ Synthetic match      │ ─────────────────────▶ │ Decision engine         │
- │ engine (22 simulated │   freeze frame at       │  • P(pass success)      │
- │ players, 10 Hz, rule-│   every pass & shot     │  • Expected Threat (xT) │
- │ based decisions)     │                         │  • Expected Goals (xG)  │
- └──────────────────────┘                         │  • option ranking       │
-                                                  └───────────┬─────────────┘
-                                                              │ decisions.json
-                                    ┌─────────────────────────▼─────────────────────────┐
-                                    │ AI agents: Microsoft Foundry + Agent Framework     │
-                                    │  Tactical Analyst · Narrator · Coach · Q&A         │
-                                    └─────────────────────────┬─────────────────────────┘
-                                                              │
-                                                  ┌───────────▼───────────┐
-                                                  │ Web app: animated     │
-                                                  │ pitch, chosen vs best │
-                                                  │ pass, decision report │
-                                                  └───────────────────────┘
-```
+![The Better Ball architecture: synthetic match engine → decision engine → AI agents → web app](docs/architecture.png)
 
 ### 1. Synthetic match engine (`engine/betterball/sim`)
 The hackathon requires synthetic data, so we built a match generator. It simulates 22 players and a ball
