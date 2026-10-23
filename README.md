@@ -47,14 +47,14 @@ at 10 Hz. The players are rule-based simulation entities, not AI or LLM agents:
 - **Laws of the game:** offside (Law 11) is called when the ball is played, giving an indirect free kick. Throw-ins, goal kicks and corners are exempt. Players usually spot a team-mate standing offside, but not always (about 4–5 offsides per match).
 - **Bounded rationality:** players choose with a noisy heuristic (lane openness, receiver space, progression) that differs from the analysis model, shaped by their own vision, risk appetite and passing skill. That gap is what makes "was there a better option?" a meaningful question.
 
-Every pass and shot event carries a **freeze frame**: the positions and velocities of all 22 players at the moment the ball was played.
+Every pass and shot event carries a **freeze frame**: the positions, velocities and **body orientation** of all 22 players at the moment the ball was played. Players turn at human speed, receive the ball facing it, and often do not see a pass behind them; a ball wrapped round or behind the body is struck less accurately and with less pace.
 
 Typical 90-minute output: 1,500–1,650 passes at 73–84% completion, 12–19 shots and 1.2–2.3 xG per team, and scores like 2–2, 1–2 and 3–1.
 
 ### 2. Decision engine (`engine/betterball/analysis`)
 | Model | What it does |
 |---|---|
-| **Pass success** (`pass_model.py`) | Physics-based time-to-intercept model, in the spirit of Spearman's pitch control. It combines execution accuracy, lane interception by every defender, and the race at the target, including a keeper's advantage in the box. |
+| **Pass success** (`pass_model.py`) | Physics-based time-to-intercept model, in the spirit of Spearman's pitch control. It combines execution accuracy, lane interception by every defender, and the race at the target, including a keeper's advantage in the box. **Body shape** counts: a ball more than ~70° off the passer's body costs time to turn (which defenders use) and accuracy, so a "magic" through ball behind him is not free. |
 | **Calibration** (`calibrate.py`) | Fits the model's physical parameters (reaction time, top speed, arrival uncertainty, …) to observed pass outcomes by minimising log-loss. It reports the Brier score and a reliability table on held-out passes. |
 | **xT** (`xt.py`) | Smooth Expected Threat surface: how dangerous it is to have the ball at each location. |
 | **xG** (`xg.py`) | Logistic model on distance, angle, defenders blocking the goal, and headers. |
@@ -68,7 +68,7 @@ Verdicts: `optimal` · `good` · `clear_upgrade` (the other pass was safer **and
 A React app that replays the match on an animated 2D pitch:
 - **Played pass:** a solid white arrow. **Better option:** a glowing dashed green arrow, each labelled with its success %.
 - **Key moments:** the biggest missed chances, shown as amber markers on the timeline and as a list. A guided tour plays the build-up, pauses, and explains each one.
-- **Broadcast view (Monday Night Football style):** a TV camera angle that follows the ball. At each key moment the camera
+- **Broadcast view (TV studio style):** a TV camera angle that follows the ball. At each key moment the camera
   zooms in and runs a telestration: spotlights and name tags, the played pass draws itself, a rewind, the shaded space the
   better runner could reach first, the defending back line, the better pass sweeping through, beaten defenders lighting up,
   then a broadcast lower-third with Replay, Details and Next.
@@ -80,7 +80,7 @@ A React app that replays the match on an animated 2D pitch:
 
 | Today | How |
 |---|---|
-| **Machine-learned pass model** | The pass model's physical parameters are *learned* from about 5,000 simulated passes by minimising log-loss (`calibrate.py`), then validated on held-out passes. Brier score 0.138 vs 0.160 for a constant baseline. |
+| **Machine-learned pass model** | The pass model's physical parameters are *learned* from about 5,000 simulated passes by minimising log-loss (`calibrate.py`), then validated on held-out passes. Brier score 0.150 vs 0.186 for a constant baseline (20% better), with body shape included. |
 | **Decision intelligence** | An algorithmic search over every option at every pass (expected value, threat, interception risk). This is analytics, not generative AI. |
 
 | AI agents (Microsoft Foundry + Agent Framework, `service/`) | What it does |

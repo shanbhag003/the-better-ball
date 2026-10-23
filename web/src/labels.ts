@@ -25,8 +25,21 @@ export const goalPct = (ev: number) => {
 
 export const minute = (t: number) => `${Math.floor(t / 60) + 1}'`;
 
-/** One-line, number-backed reason for a decision's verdict. */
+/** One-line, number-backed reason for a decision's verdict, plus the body shape when it mattered. */
 export function explain(d: Decision): string {
+  return reason(d) + bodyNote(d);
+}
+
+function bodyNote(d: Decision): string {
+  const c = d.chosen;
+  const b = d.best;
+  if (d.verdict === "offside" || c.kind !== "pass") return "";
+  if ((c.off_body ?? 0) > 120) return " Played blind, behind his body.";
+  if (b.kind === "pass" && (b.off_body ?? 0) <= 70 && (c.off_body ?? 0) > 70) return " The better ball was right in front of him.";
+  return "";
+}
+
+function reason(d: Decision): string {
   const c = d.chosen;
   const b = d.best;
   const arrives = `${pct(b.p)} vs ${pct(c.p)}`;

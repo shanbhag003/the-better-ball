@@ -30,6 +30,8 @@ FIT = {
     "keeper_advantage": (0.0, 1.5),
     "exec_decay": (40.0, 600.0),
     "passer_clearance": (0.5, 4.0),
+    "turn_rate": (1.0, 20.0),
+    "blind_exec": (0.0, 0.8),
 }
 
 
@@ -46,7 +48,9 @@ def load_passes(paths: list[Path]) -> list[dict]:
             pos = pitch.to_attacking_frame(np.array(ev["freeze_frame"]["pos"], float), d)
             vel = np.array(ev["freeze_frame"]["vel"], float) * d
             opp = np.where(team != team[ev["player"]])[0]
+            face = ev["freeze_frame"].get("face")
             rows.append({
+                "face": None if face is None or ev.get("set_piece") else float(pitch.face_to_attacking_frame(face[ev["player"]], d)),
                 "passer": pos[ev["player"]],
                 "target": pitch.to_attacking_frame(np.array(ev["target"], float), d),
                 "rpos": pos[ev["recipient"]],
@@ -63,7 +67,7 @@ def load_passes(paths: list[Path]) -> list[dict]:
 def predict(rows: list[dict], params: PassParams) -> np.ndarray:
     return np.array([
         pass_success(r["passer"], r["target"], r["rpos"], r["rvel"], r["dpos"], r["dvel"], r["lofted"], params,
-                     keeper=r["keeper"]).p_success
+                     keeper=r["keeper"], passer_face=r["face"]).p_success
         for r in rows
     ])
 

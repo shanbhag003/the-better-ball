@@ -1,7 +1,7 @@
 """Physics-based pass success probability.
 
 A pass from P to target T succeeds if
-  1. it is executed accurately (falls off with distance and pressure),
+  1. it is executed accurately (falls off with distance, pressure and body shape),
   2. no defender can reach the ball's path before the ball gets there, and
   3. the intended receiver wins the race to T against nearby defenders.
 
@@ -9,6 +9,10 @@ Defender reach times follow the time-to-intercept idea from Spearman's
 pitch-control model: react for ``reaction`` seconds while drifting with current
 velocity, then run in a straight line at ``max_speed``. Races are turned into
 probabilities with a logistic on the time margin.
+
+Body shape: a target more than ``OPEN_BODY`` radians off the passer's body has to be
+wrapped round or turned into. That costs time (``turn_rate``), which defenders use, and
+accuracy (``blind_exec`` for a ball played straight behind him).
 
 The physical parameters are fitted to observed pass outcomes by
 ``python -m betterball.analysis.calibrate`` and stored in ``pass_params.json``.
@@ -22,8 +26,11 @@ from pathlib import Path
 
 import numpy as np
 
+from .. import pitch
+
 LOFT_DISTANCE = 35.0     # passes longer than this are lofted by default
 BLOCK_RADIUS = 2.0       # m: defenders this close to the ball's path need no reaction time
+OPEN_BODY = 1.2          # rad (~70 degrees): passes within this of the body need no turn
 PARAMS_FILE = Path(__file__).with_name("pass_params.json")
 
 
@@ -39,6 +46,8 @@ class PassParams:
     pressure_penalty: float = 0.12  # execution loss under full pressure
     passer_clearance: float = 1.0   # m of path next to the passer that cannot be cut out
     keeper_advantage: float = 0.5   # s, a keeper can use his hands inside the box
+    turn_rate: float = 3.0          # rad/s, how fast a passer opens up to a ball behind him
+    blind_exec: float = 0.3         # execution loss for a ball played straight behind the body
 
     @classmethod
     def load(cls, path: Path = PARAMS_FILE) -> "PassParams":
@@ -79,6 +88,8 @@ class PassEstimate:
     flight_time: float
     lofted: bool
     threat_defender: int | None  # index into the defenders array most likely to stop it
+    off_body: float = 0.0        # degrees between the passer's body and the pass
+    turn_time: float = 0.0       # s spent opening up before the ball can be played
 
     def as_dict(self) -> dict:
         return {
@@ -88,6 +99,8 @@ class PassEstimate:
             "p_contest": round(self.p_contest, 4),
             "flight_time": round(self.flight_time, 2),
             "lofted": self.lofted,
+            "off_body": round(self.off_body),
+            "turn_time": round(self.turn_time, 2),
         }
 
 
@@ -101,6 +114,7 @@ def pass_success(
     lofted: bool | None = None,
     params: PassParams | None = None,
     keeper: int | None = None,
+    passer_face: float | None = None,
 ) -> PassEstimate:
     pp = params or PARAMS
     coef = np.pi / (np.sqrt(3.0) * pp.sigma)
@@ -113,6 +127,10 @@ def pass_success(
         return PassEstimate(0.99, 0.99, 1.0, 1.0, 0.0, lofted, None)
 
     T = flight_time(d, lofted)
+    # Body shape: time to open up to a ball behind him, and some accuracy lost doing it.
+    off = pitch.angle_off_body(passer_face, passer, target) if passer_face is not None else 0.0
+    wrap = max(0.0, off - OPEN_BODY)
+    turn = wrap / pp.turn_rate
 
     # Points along the ball's path, skipping the stretch at the passer's feet.
     n = max(6, int(d))
@@ -121,7 +139,7 @@ def pass_success(
     if len(k) == 0:
         k = np.array([1.0])
     path = passer + k[:, None] * (target - passer)
-    t_ball = k * T
+    t_ball = turn + k * T
 
     drift = defenders_pos + defenders_vel * pp.reaction
     dist = np.linalg.norm(path[None, :, :] - drift[:, None, :], axis=-1)  # (n_def, n_pts)
@@ -145,7 +163,7 @@ def pass_success(
     # 3) Contest at the target: ball must arrive AND the receiver must get there.
     r_drift = receiver_pos + receiver_vel * pp.receiver_reaction
     t_recv = pp.receiver_reaction + np.linalg.norm(target - r_drift) / pp.max_speed
-    arrival = max(T, t_recv) - pp.contest_bias
+    arrival = max(turn + T, t_recv) - pp.contest_bias
     t_def_target = pp.reaction + np.linalg.norm(target - drift, axis=-1) / pp.max_speed
     if keeper is not None and target[0] > 88.5 and abs(target[1] - 34.0) < 20.15:
         t_def_target[keeper] -= pp.keeper_advantage
@@ -157,6 +175,7 @@ def pass_success(
     nearest = float(np.min(np.linalg.norm(defenders_pos - passer, axis=-1))) if len(defenders_pos) else 99.0
     pressure = np.clip((3.0 - nearest) / 3.0, 0.0, 1.0)
     p_exec = float(np.exp(-d / pp.exec_decay) * (0.88 if lofted else 1.0) * (1.0 - pp.pressure_penalty * pressure))
+    p_exec *= 1.0 - pp.blind_exec * wrap / (np.pi - OPEN_BODY)
 
     threat = 1.0 - (1.0 - p_lane_each) * (1.0 - p_contest_each)
     threat_idx = int(np.argmax(threat)) if len(threat) and threat.max() > 0.05 else None
@@ -169,4 +188,6 @@ def pass_success(
         flight_time=T,
         lofted=bool(lofted),
         threat_defender=threat_idx,
+        off_body=float(np.degrees(off)),
+        turn_time=float(turn),
     )

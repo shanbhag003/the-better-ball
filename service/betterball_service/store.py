@@ -61,6 +61,16 @@ def _goal(ev: float) -> str:
     return f"{v:.1f}%" if v < 10 else f"{round(v)}%"
 
 
+def _body(o: dict) -> str:
+    """The passer's body shape for this ball, in words."""
+    off, turn = o.get("off_body") or 0, o.get("turn") or 0
+    if off <= 70:
+        return "in front of him, no turn needed"
+    if off <= 120:
+        return f"across his body: he has to open up first ({turn:.1f}s)"
+    return f"behind him: he has to turn ({turn:.1f}s) and may not even see it"
+
+
 def _minute(t: float) -> int:
     return int(t // 60) + 1
 
@@ -181,6 +191,7 @@ class Match:
             "goal_chance": _goal(o["ev"]),
             "defenders_beaten": o.get("bypassed", 0),
             "into_space": o.get("style") == "space",
+            "body_shape": _body(o) if o["kind"] == "pass" else None,
         }
 
     def interceptor(self, eid: int) -> int | None:

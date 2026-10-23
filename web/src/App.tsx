@@ -234,6 +234,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
     return () => window.clearTimeout(id);
   }, [broadcast, breakdownDone, selected?.id]);
 
+  const atMoment = !!selected && Math.abs(pb.t - selected.t) < 0.3;
   const showCard = selected && !pb.playing && Math.abs(pb.t - selected.t) < 0.3 && (!broadcast || (breakdownDone && detailsOpen));
 
   const live = useMemo(
@@ -264,7 +265,7 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
 
       <main className="layout">
         <section className="stage">
-          <div className={`pitch-card card ${broadcast ? "mnf" : ""}`}>
+          <div className={`pitch-card card ${broadcast ? "broadcast" : ""}`}>
             <div className="pitch-legend">
               <span><i className="line played" /> Played</span>
               <span><i className="line better" /> Better option</span>
@@ -274,6 +275,12 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
               ) : null}
               {showCard && selected!.offside_line !== null && selected!.offside_line !== undefined && (
                 <span><i className="offline" /> Offside line</span>
+              )}
+              {atMoment && selected!.face != null && (
+                <span className="has-tip" data-tip="What he can play without turning"><i className="lg-fov" /> Field of view</span>
+              )}
+              {atMoment && (
+                <span className="has-tip" data-tip="Green: clear · amber: tight · red: likely cut out"><i className="lg-lane" /> Passing lane</span>
               )}
               <span className="muted">Hover a player for details</span>
             </div>

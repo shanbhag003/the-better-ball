@@ -28,6 +28,12 @@ ACCEL = 5.0          # m/s^2
 JOG = 4.2            # m/s, default shape-keeping speed
 BALL_DECEL = 3.0     # m/s^2, rolling resistance
 CONTROL_R = 1.0
+# Body orientation: how fast players turn and what they can see.
+TURN_ON_BALL = 3.0    # rad/s, turning with the ball
+TURN_PRESSED = 1.6    # rad/s, with a defender tight (hard to turn)
+TURN_OFF_BALL = 4.5   # rad/s, without the ball
+FOV = 2.1             # rad: options within ~120 degrees of the body are seen
+OPEN_BODY = 1.2       # rad: beyond ~70 degrees off the body, a pass has to be wrapped round
 GOAL_HALF = pitch.GOAL_WIDTH / 2
 
 
@@ -89,6 +95,7 @@ class MatchEngine:
         self.pos = np.zeros((self.n, 2))
         self.vel = np.zeros((self.n, 2))
         self.noise = np.zeros((self.n, 2))
+        self.face = np.zeros(self.n)  # body orientation, radians in raw pitch coordinates
         self.attack_dir = [1, -1]
         self.s = State()
         self.events: list[dict] = []
@@ -125,7 +132,11 @@ class MatchEngine:
         return ev
 
     def freeze(self) -> dict:
-        return {"pos": np.round(self.pos, 2).tolist(), "vel": np.round(self.vel, 2).tolist()}
+        return {"pos": np.round(self.pos, 2).tolist(), "vel": np.round(self.vel, 2).tolist(),
+                "face": np.round(self.face, 3).tolist()}
+
+    def angle_off(self, i: int, target_raw: np.ndarray) -> float:
+        return pitch.angle_off_body(self.face[i], self.pos[i], target_raw)
 
     # ------------------------------------------------------------- set pieces
     def kickoff(self, team: int):
@@ -137,6 +148,7 @@ class MatchEngine:
             x = min(x, 50.5 if t == team else 43.0)
             self.pos[i] = self.raw(np.array([x, y]), t)
         self.vel[:] = 0
+        self.face[:] = [0.0 if self.attack_dir[t] == 1 else np.pi for t in self.team]
         striker = next(i for i in range(self.n) if self.team[i] == team and self.players[i]["position"] == "ST")
         self.pos[striker] = pitch.CENTER + np.array([-0.6 * self.attack_dir[team], 0])
         self.s.ball = pitch.CENTER.copy()
@@ -412,6 +424,26 @@ class MatchEngine:
         self.pos = pitch.clamp_to_pitch(self.pos, -1.0)
         # Slow-varying positional noise (Ornstein-Uhlenbeck).
         self.noise += -0.05 * self.noise + self.rng.normal(0, 0.35, self.noise.shape)
+        self.turn_bodies()
+
+    def turn_bodies(self):
+        """Rotate each body towards where the player wants to face, at a human turning speed."""
+        s = self.s
+        speed = np.linalg.norm(self.vel, axis=1)
+        for i in range(self.n):
+            if s.mode == "owned" and s.owner == i:
+                # On the ball: towards where he is carrying it, else open up towards goal.
+                goal = self.raw(np.array([105.0, 34.0]), self.team[i])
+                d = self.vel[i] if speed[i] > 1.5 else goal - self.pos[i]
+                rate = TURN_PRESSED if self.nearest_opp_dist(i) < 2.5 else TURN_ON_BALL
+            else:
+                # Off the ball: running players face their run, the rest watch the ball.
+                d = self.vel[i] if speed[i] > 3.5 else s.ball - self.pos[i]
+                rate = TURN_OFF_BALL
+            want = math.atan2(d[1], d[0])
+            diff = (want - self.face[i] + math.pi) % (2 * math.pi) - math.pi
+            step = rate * DT
+            self.face[i] += float(np.clip(diff, -step, step))
 
     # ------------------------------------------------------------- decisions
     def decide(self):
@@ -450,6 +482,10 @@ class MatchEngine:
                 d = float(np.linalg.norm(tgt - me))
                 if d < 4 or d > 25 + 35 * vision:
                     continue
+                # Body shape: options behind him are often not seen at all, and are harder to play.
+                off = 0.0 if dead else self.angle_off(i, self.raw(tgt, team))  # set pieces: body set first
+                if off > FOV and self.rng.random() > 0.2 + 0.5 * vision:
+                    continue
                 lane = float(np.min(pitch.point_segment_distance(P[opp], me, tgt)))
                 space = float(np.min(np.linalg.norm(P[opp] - tgt, axis=1)))
                 L, S = min(lane, 5) / 5, min(space, 8) / 8
@@ -458,6 +494,7 @@ class MatchEngine:
                 score -= max(0.0, d - 25) / 40
                 if tgt[0] > 88 and 14 < tgt[1] < 54:
                     score += 0.25 * risk
+                score -= 0.35 * max(0.0, off - OPEN_BODY) / (math.pi - OPEN_BODY)
                 options.append((score, "pass", j, tgt))
 
         if not dead and not self.is_gk[i]:
@@ -496,8 +533,10 @@ class MatchEngine:
         lofted = d > 35 or (s.dead_kind in ("corner", "goal_kick") and d > 25) or (lane < 1.2 and d > 18 and self.rng.random() < 0.3)
         pressure = max(0.0, (3.0 - self.nearest_opp_dist(i)) / 3.0)
         acc = self.a("passing", i)
-        ang_sd = (0.02 + 0.07 * (1 - acc)) * (1 + pressure) * (1.3 if lofted else 1.0)
-        len_sd = 0.05 + 0.1 * (1 - acc)
+        # Wrong body shape (ball played across or behind the body): less accurate, less pace.
+        wrap = 0.0 if s.dead_kind else max(0.0, self.angle_off(i, target) - OPEN_BODY) / (math.pi - OPEN_BODY)
+        ang_sd = (0.02 + 0.07 * (1 - acc)) * (1 + pressure) * (1.3 if lofted else 1.0) * (1 + 1.5 * wrap)
+        len_sd = (0.05 + 0.1 * (1 - acc)) * (1 + wrap)
         vec = target - start
         ang = math.atan2(vec[1], vec[0]) + self.rng.normal(0, ang_sd)
         dist = d * max(0.3, self.rng.normal(1.0, len_sd))
@@ -521,9 +560,9 @@ class MatchEngine:
             spot = pitch.clamp_to_pitch(self.pos[j], 1.0)
             self.go_dead("free_kick", 1 - int(team), spot)
             return
-        self.launch(i, j, aim, lofted, ev, kind="pass")
+        self.launch(i, j, aim, lofted, ev, kind="pass", pace=1.0 - 0.3 * wrap)
 
-    def launch(self, i, j, aim, lofted, ev, kind):
+    def launch(self, i, j, aim, lofted, ev, kind, pace: float = 1.0):
         s = self.s
         start = s.ball.copy()
         d = float(np.linalg.norm(aim - start)) + 1e-6
@@ -534,6 +573,7 @@ class MatchEngine:
             v0 = math.sqrt(v_end**2 + 2 * BALL_DECEL * d)
             if lofted:
                 v0 = max(14.0, d / 2.4)
+            v0 *= pace
         s.ball_v = (aim - start) / d * v0
         s.mode = "flight"
         s.owner = None
@@ -685,6 +725,8 @@ class MatchEngine:
 
     def take(self, i: int):
         s = self.s
+        if np.linalg.norm(s.ball_v) > 1.0:
+            self.face[i] = math.atan2(-s.ball_v[1], -s.ball_v[0])  # receives facing the ball
         f = s.flight
         aerial = f is not None and f.lofted and not f.landed and s.ball_z > 1.0
         prev_team = s.last_touch

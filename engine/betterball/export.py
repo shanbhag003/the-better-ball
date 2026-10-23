@@ -25,6 +25,8 @@ def _opt(o: dict | None) -> dict | None:
         "lofted": bool(o.get("lofted")),
         "beaten": o.get("beaten", []),
         "threat": o.get("threat_defender"),
+        "off_body": o.get("off_body", 0),  # degrees between the passer's body and the ball
+        "turn": o.get("turn_time", 0),  # s to open up before playing it
     }
 
 
@@ -67,6 +69,7 @@ def build_bundle(match: dict, report: dict) -> dict:
             "alts": [_opt(o) for o in d["top_options"][:3]],
             "offside_line": d.get("offside_line"),
             "offside_players": d.get("offside_players", []),
+            "face": d.get("face"),  # passer's body orientation (raw radians), None at set pieces
         }
 
     players = [{

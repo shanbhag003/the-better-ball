@@ -9,9 +9,10 @@ interface Step {
 
 const STEPS: Step[] = [
   { sel: ".pitch-legend", title: "Read the arrows", text: "White = the pass played. Green dashed = the better option." },
+  { sel: ".pitch-wrap", title: "Body shape counts", text: "The notch shows where each player faces. Cyan cone: what he can play without turning. Lanes: green clear, amber tight, red likely cut out." },
   { sel: ".timeline", title: "Find the moments", text: "Amber ticks are key moments. Click one to jump there." },
   { sel: ".sidebar .list", title: "Biggest missed chances", text: "Every card is a moment. Click to replay it." },
-  { sel: ".broadcast-toggle", title: "Broadcast view", text: "TV camera angle. Key moments get a Monday-night style breakdown." },
+  { sel: ".broadcast-toggle", title: "Broadcast view", text: "TV camera angle. Key moments get a studio-style breakdown." },
   { sel: ".pundit-toggle", title: "AI Pundit", text: "An AI pundit talks you through each key moment, voiced by Azure AI Speech." },
   { sel: ".toggles", title: "Your controls", text: "Hide the better passes or stop auto-pausing." },
   { sel: ".coach-tab", title: "AI coach", text: "Two AI coaches review a team in parallel. The head coach writes the report." },

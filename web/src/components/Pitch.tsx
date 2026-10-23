@@ -1,7 +1,7 @@
 import { ChevronRight, Maximize2, Mic, Minus, PanelRightOpen, Pause, Play, Plus, RotateCcw, Tv } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { follow, L, projector, W, type Cam, type Geom, type Proj } from "../camera";
-import { recentDecisions, snapshot, walkOff, type Interlude } from "../data";
+import { bodyFacing, recentDecisions, snapshot, walkOff, type Interlude } from "../data";
 import type { PunditScript, Voice } from "../api";
 import { goalPct, minute, pct, VERDICT } from "../labels";
 import { getPundit, lineTimes } from "../pundit";
@@ -14,6 +14,9 @@ const BETTER = "#00ff85";
 const PLAYED = "#ffffff";
 const OFFSIDE = "#ffb900";
 const LINE = "#04f5ff";
+const CUT_OUT = "#e90052"; // the defender most likely to cut the played ball out
+const OPEN_BODY = 1.2; // rad (~70 degrees): passes inside this need no turn (matches the engine)
+const LANE_HALF = 2; // m either side of the pass a defender can block without reacting
 const FONT = `"Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif`;
 const HOLD = 3.5; // real seconds a pass overlay stays readable during playback
 const HANDOFF = 0.35; // real seconds an older overlay takes to fade once a new pass is played
@@ -123,6 +126,8 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [zoomed, setZoomed] = useState(false);
   const posRef = useRef<[number, number][]>([]);
+  const faceRef = useRef<number[]>([]); // smoothed body orientation per player (radians)
+  const faceT = useRef(0);
   const tele = useRef<Tele>({ ...IDLE });
   const [caption, setCaption] = useState<{ waiting: boolean; text: string } | null>(null);
   const [headline, setHeadline] = useState<string | null>(null);
@@ -190,7 +195,19 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         fade = w.alpha;
       }
       posRef.current = snap.pos;
+      // ---- body orientation, smoothed so markers turn like people instead of flicking
+      const want = bodyFacing(match, t, snap);
+      const prevFaces = faceRef.current;
+      const mdt = Math.abs(t - faceT.current);
+      const faces = want.map((w, i) => {
+        if (prevFaces.length !== want.length || mdt > 1.5) return w;
+        const diff = ((w - prevFaces[i] + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        return prevFaces[i] + Math.max(-4.5 * mdt, Math.min(4.5 * mdt, diff));
+      });
+      faceRef.current = faces;
+      faceT.current = t;
       const sticky = !interlude && selected && Math.abs(t - selected.t) < 0.25 ? selected : null;
+      if (sticky?.face != null) faces[sticky.player] = sticky.face; // the passer's exact body shape
 
       // ---- telestration clock (broadcast breakdown of a key moment)
       const breakdown = broadcast && sticky ? sticky : null;
@@ -281,6 +298,17 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         line(ctx, P, [[x, 0], [x, W]], { color: OFFSIDE, width: 2, alpha: 0.85, dash: [7, 6] });
         const [lx, ly] = P(x, W);
         pill(ctx, lx, ly + 14, "Offside line", OFFSIDE, "#2a0030", 0.95);
+      }
+
+      // ---- body shape and passing lanes for the moment on screen
+      if (sticky) {
+        const a = breakdown ? phase(ph, T.spots) : 1;
+        if (sticky.face != null) fieldOfView(ctx, proj, sticky.start, sticky.face, a);
+        laneCorridor(ctx, proj, sticky.start, sticky.chosen, breakdown ? phase(ph, T.played) : 1);
+        if (better(sticky)) laneCorridor(ctx, proj, sticky.start, sticky.best, breakdown ? phase(ph, T.better) : 1);
+        // The defender most likely to cut the played ball out.
+        const th = sticky.chosen.threat;
+        if (th != null && sticky.chosen.p < 0.75) rings.set(th, { color: CUT_OUT, alpha: a * (0.6 + 0.4 * pulse) });
       }
 
       // ---- pass overlays
@@ -414,6 +442,16 @@ export function Pitch({ match, pb, selected, showBetter, broadcast, onBreakdown,
         ctx.lineWidth = p.role === "GK" ? 2.5 : 1.6;
         ctx.strokeStyle = p.role === "GK" ? LINE : "rgba(255,255,255,0.9)";
         ctx.stroke();
+        // Body shape: a notch on the rim points where he is facing.
+        const [hx, hy] = P(x + Math.cos(faces[i]), y + Math.sin(faces[i]));
+        const sa = Math.atan2(hy - cy, hx - cx);
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(sa) * (r + 5), py + Math.sin(sa) * (r + 5));
+        ctx.lineTo(cx + Math.cos(sa + 0.45) * (r - 0.5), py + Math.sin(sa + 0.45) * (r - 0.5));
+        ctx.lineTo(cx + Math.cos(sa - 0.45) * (r - 0.5), py + Math.sin(sa - 0.45) * (r - 0.5));
+        ctx.closePath();
+        ctx.fillStyle = p.role === "GK" ? LINE : "#fff";
+        ctx.fill();
         ctx.fillStyle = "#fff";
         ctx.font = `700 ${Math.round(r * 0.95)}px ${FONT}`;
         ctx.textAlign = "center";
@@ -923,6 +961,50 @@ function drawPitch(ctx: CanvasRenderingContext2D, proj: Proj, g: Geom) {
   }
   ctx.restore();
   void g;
+}
+
+/**
+ * The passer's field of view on the grass: everything inside ~70 degrees of his body can be played
+ * without turning. A ball outside it has to be wrapped round or turned into first.
+ */
+function fieldOfView(ctx: CanvasRenderingContext2D, proj: Proj, at: Pt, face: number, alpha: number) {
+  if (alpha <= 0) return;
+  const R = 16;
+  const edge = (a: number): Pt => [at[0] + Math.cos(a) * R, at[1] + Math.sin(a) * R];
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  path(ctx, proj.P, [at, ...circlePts(at[0], at[1], R, face - OPEN_BODY, face + OPEN_BODY, 24)], true);
+  const [cx, cy] = proj.P(...at);
+  const [ex, ey] = proj.P(...edge(face));
+  const glow = ctx.createLinearGradient(cx, cy, ex, ey);
+  glow.addColorStop(0, "rgba(4,245,255,0.2)");
+  glow.addColorStop(1, "rgba(4,245,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fill();
+  ctx.setLineDash([4, 5]);
+  ctx.strokeStyle = "rgba(4,245,255,0.5)";
+  ctx.lineWidth = 1.2;
+  path(ctx, proj.P, [edge(face - OPEN_BODY), at, edge(face + OPEN_BODY)]);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A passing lane as a corridor on the grass, coloured by the chance the ball arrives. */
+function laneCorridor(ctx: CanvasRenderingContext2D, proj: Proj, from: Pt, o: Decision["chosen"], alpha: number) {
+  if (alpha <= 0 || o.kind !== "pass" || o.lofted || o.p == null) return; // a lofted ball goes over the lane
+  const [x0, y0] = from;
+  const [x1, y1] = o.target;
+  const len = Math.hypot(x1 - x0, y1 - y0);
+  if (len < 2) return;
+  const nx = (-(y1 - y0) / len) * LANE_HALF;
+  const ny = ((x1 - x0) / len) * LANE_HALF;
+  const rgb = o.p >= 0.7 ? "0,255,133" : o.p >= 0.4 ? "255,185,0" : "233,0,82";
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  path(ctx, proj.P, [[x0 + nx, y0 + ny], [x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x0 - nx, y0 - ny]], true);
+  ctx.fillStyle = `rgba(${rgb},0.17)`;
+  ctx.fill();
+  ctx.restore();
 }
 
 /** Glowing disc on the grass under a player (the "spotlight"). */

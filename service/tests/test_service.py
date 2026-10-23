@@ -129,7 +129,7 @@ def test_parse_pundit_script():
 
     s = parse_script(
         "HEADLINE: The Run Nobody Found\n1: Coledale has it in midfield.\n2) He goes short, 61% to arrive.\n"
-        "3 - #9 Dunford, the ST, was free behind them #football #MNF\nSHOW: space, back_line"
+        "3 - #9 Dunford, the ST, was free behind them #football #matchday\nSHOW: space, back_line"
     )
     assert s.headline == "The Run Nobody Found" and len(s.lines) == 3
     assert s.lines[2] == "Dunford, the centre-forward, was free behind them" and s.show.space and s.show.back_line and not s.show.beaten

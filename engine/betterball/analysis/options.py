@@ -41,7 +41,8 @@ def _frame_arrays(event: dict, players: list[dict]):
     vel = np.array(ff["vel"], float) * attack_dir  # mirroring flips both velocity components
     team = np.array([p["team_idx"] for p in players])
     is_gk = np.array([p["role"] == "GK" for p in players])
-    return pos, vel, team, is_gk
+    face = pitch.face_to_attacking_frame(ff["face"], attack_dir) if "face" in ff else None
+    return pos, vel, team, is_gk, face
 
 
 def _beaten_mask(passer: np.ndarray, target: np.ndarray, outfield_opp: np.ndarray) -> np.ndarray:
@@ -67,9 +68,9 @@ def _bypassed(passer: np.ndarray, target: np.ndarray, outfield_opp: np.ndarray) 
     return int(_beaten_mask(passer, target, outfield_opp).sum())
 
 
-def _score_pass(passer_xy, target, recv_idx, pos, vel, opp_idx, keeper, lofted=None):
+def _score_pass(passer_xy, target, recv_idx, pos, vel, opp_idx, keeper, lofted=None, face=None):
     est = pass_success(passer_xy, target, pos[recv_idx], vel[recv_idx], pos[opp_idx], vel[opp_idx], lofted,
-                       keeper=keeper)
+                       keeper=keeper, passer_face=face)
     p = est.p_success
     turnover_spot = passer_xy + 0.6 * (target - passer_xy)
     gain = float(xt(target))
@@ -81,8 +82,10 @@ def _score_pass(passer_xy, target, recv_idx, pos, vel, opp_idx, keeper, lofted=N
 
 def evaluate_decision(event: dict, players: list[dict]) -> dict:
     """Score all options for a pass/shot event. Returns a JSON-ready dict."""
-    pos, vel, team, is_gk = _frame_arrays(event, players)
+    pos, vel, team, is_gk, faces = _frame_arrays(event, players)
     me = event["player"]
+    # Body shape matters in open play; at a set piece the taker sets himself first.
+    face = None if faces is None or event.get("set_piece") else float(faces[me])
     my_team = team[me]
     opp_idx = np.where(team != my_team)[0]
     mates = [j for j in np.where(team == my_team)[0] if j != me]
@@ -118,7 +121,7 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
             if space[0] > lead[0] + 1.0:
                 targets.append(("space", space))
         for kind, target in targets:
-            est, ev, gain, loss, threat = _score_pass(passer_xy, target, j, pos, vel, opp_idx, keeper)
+            est, ev, gain, loss, threat = _score_pass(passer_xy, target, j, pos, vel, opp_idx, keeper, face=face)
             options.append({
                 "kind": "pass",
                 "style": kind,
@@ -162,7 +165,8 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
     else:
         target = pitch.to_attacking_frame(np.array(event["target"], float), event["attack_dir"])
         recv = event["recipient"]
-        est, ev, gain, loss, threat = _score_pass(passer_xy, target, recv, pos, vel, opp_idx, keeper, event.get("lofted"))
+        est, ev, gain, loss, threat = _score_pass(passer_xy, target, recv, pos, vel, opp_idx, keeper, event.get("lofted"),
+                                                  face=face)
         chosen = {
             "kind": "pass",
             "style": "chosen",
@@ -217,6 +221,8 @@ def evaluate_decision(event: dict, players: list[dict]) -> dict:
     return {
         "event_id": event["id"],
         "xt_start": round(xt_here, 4),
+        # Passer's body orientation (raw pitch radians) for drawing; None at set pieces.
+        "face": None if face is None else round(float(np.asarray(event["freeze_frame"]["face"][me])), 3),
         "chosen": chosen,
         "best": best,
         "best_safe": best_safe,

@@ -371,7 +371,7 @@ def pundit(client, voice: str, language: str) -> Agent:
         description="TV pundit who directs a telestration breakdown of one moment.",
         instructions=(
             "You are a former top-flight player turned studio pundit, doing a telestration breakdown on a big "
-            f"Monday-night football show. Speak {language} the way a pundit talks at the touchscreen: conversational, "
+            f"evening football analysis show. Speak {language} the way a pundit talks at the touchscreen: conversational, "
             "opinionated, a bit passionate, present tense, talking the viewer through it ('Look at this...', "
             "'Now watch...', 'He has to see that!'). Use real football language where it fits: half-space, between "
             "the lines, in behind, the back four, line-breaking pass, on the half-turn, third man, switch of play, "

@@ -119,3 +119,14 @@ def test_offside_law():
     own_half = pos.copy()
     own_half[:, 0] -= 40
     assert pitch.offside_players(own_half, attackers, defenders, 20.0, passer=0) == set()
+
+
+def test_ball_behind_the_body_is_harder():
+    passer = np.array([50.0, 34.0])
+    target = np.array([62.0, 34.0])  # straight ahead along x
+    defenders = np.array([[58.0, 40.0], [80.0, 60.0]])
+    facing = pass_success(passer, target, target, np.zeros(2), defenders, _no_vel(2), params=BASE, passer_face=0.0)
+    back_to_it = pass_success(passer, target, target, np.zeros(2), defenders, _no_vel(2), params=BASE, passer_face=np.pi)
+    assert facing.turn_time == 0 and back_to_it.turn_time > 0
+    assert back_to_it.p_success < facing.p_success - 0.05
+    assert round(back_to_it.off_body) == 180

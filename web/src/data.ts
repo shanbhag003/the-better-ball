@@ -117,3 +117,33 @@ export function walkOff(m: Match, pos: [number, number][], k: number): { pos: [n
 
 /** Seconds into the break when the score graphic comes up. */
 export const BOARD_DELAY = WALK_OFF + 0.2;
+
+/**
+ * Body orientation (radians, raw pitch) of every player at time t, using the simulator's rules:
+ * on the ball he faces where he carries it, or opens up towards goal; off the ball he faces his
+ * run when sprinting, otherwise he watches the ball.
+ */
+export function bodyFacing(m: Match, t: number, snap: Snapshot): number[] {
+  const back = snapshot(m, t - 0.4);
+  const [bx, by, bz] = snap.ball;
+  let owner = -1;
+  let best = 1.6;
+  snap.pos.forEach(([x, y], i) => {
+    const d = Math.hypot(x - bx, y - by);
+    if (d < best && bz < 1.2) [owner, best] = [i, d];
+  });
+  return snap.pos.map(([x, y], i) => {
+    const vx = (x - back.pos[i][0]) / 0.4;
+    const vy = (y - back.pos[i][1]) / 0.4;
+    const speed = Math.hypot(vx, vy);
+    if (speed > 20) return Math.atan2(by - y, bx - x); // half-time teleport: no real velocity
+    if (i === owner) {
+      if (speed > 1.5) return Math.atan2(vy, vx);
+      const team = m.players[i].team;
+      const keeper = m.players.findIndex((p) => p.team === team && p.role === "GK");
+      const goalX = snap.pos[keeper][0] < 52.5 ? 105 : 0; // attack away from your own keeper
+      return Math.atan2(34 - y, goalX - x);
+    }
+    return speed > 3.5 ? Math.atan2(vy, vx) : Math.atan2(by - y, bx - x);
+  });
+}

@@ -37,6 +37,18 @@ def from_attacking_frame(xy: np.ndarray, attack_dir: int) -> np.ndarray:
     return to_attacking_frame(xy, attack_dir)
 
 
+def face_to_attacking_frame(face: float | np.ndarray, attack_dir: int):
+    """Body orientation (radians) in the attacking frame: the mirror is a 180-degree turn."""
+    return np.asarray(face, dtype=float) + (0.0 if attack_dir == 1 else np.pi)
+
+
+def angle_off_body(face: float, origin: np.ndarray, target: np.ndarray) -> float:
+    """How far (radians, 0..pi) a target is from where a player is facing."""
+    v = np.asarray(target, float) - np.asarray(origin, float)
+    diff = np.arctan2(v[1], v[0]) - face
+    return float(abs((diff + np.pi) % (2 * np.pi) - np.pi))
+
+
 def goal_opening_angle(xy: np.ndarray) -> np.ndarray:
     """Angle (radians) subtended by the goal mouth at x = 105 from each point."""
     xy = np.atleast_2d(np.asarray(xy, dtype=float))

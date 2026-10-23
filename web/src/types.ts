@@ -40,6 +40,8 @@ export interface Option {
   offside?: boolean;
   lofted?: boolean; // ball played through the air
   threat: number | null;
+  off_body?: number; // degrees between the passer's body and the ball
+  turn?: number; // s to open up before he can play it
 }
 
 export interface Decision {
@@ -59,6 +61,7 @@ export interface Decision {
   start: [number, number];
   offside_line: number | null; // raw pitch x of the offside line when the ball was played
   offside_players: number[]; // team-mates standing offside at that moment
+  face?: number | null; // passer's body orientation (radians, raw pitch), null at set pieces
 }
 
 export interface MatchEvent {
