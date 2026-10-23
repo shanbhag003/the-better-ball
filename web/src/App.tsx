@@ -277,10 +277,10 @@ function Replay({ match, pb }: { match: Match; pb: Playback }) {
                 <span><i className="offline" /> Offside line</span>
               )}
               {atMoment && selected!.face != null && (
-                <span className="has-tip" data-tip="What he can play without turning"><i className="lg-fov" /> Field of view</span>
+                <span className="has-tip down" data-tip="What he can play without turning"><i className="lg-fov" /> Field of view</span>
               )}
               {atMoment && (
-                <span className="has-tip" data-tip="Green: clear · amber: tight · red: likely cut out"><i className="lg-lane" /> Passing lane</span>
+                <span className="has-tip down" data-tip="Green: clear · amber: tight · red: likely cut out"><i className="lg-lane" /> Passing lane</span>
               )}
               <span className="muted">Hover a player for details</span>
             </div>
